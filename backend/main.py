@@ -103,6 +103,9 @@ app.include_router(friends.router)
 app.include_router(websocket.router)
 app.include_router(telegram_bot.router)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+DOCS_DIR = PROJECT_ROOT / "docs"
+DOCS_DIR.mkdir(exist_ok=True)
+app.mount("/docs", StaticFiles(directory=DOCS_DIR), name="docs")
 ensure_schema_compatibility()
 
 
