@@ -247,6 +247,12 @@ function Composer({ channelName, onSend, error, typingText, members = [] }) {
   const stopTypingRef = useRefChat(null);
   const mentionOptions = members.slice(0, 8);
 
+  const resizeComposer = (ta = ref.current) => {
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(200, ta.scrollHeight) + 'px';
+  };
+
   const submit = async () => {
     const v = val.trim();
     if (!v) return;
@@ -255,6 +261,14 @@ function Composer({ channelName, onSend, error, typingText, members = [] }) {
     setVal('');
     setMentionOpen(false);
     if (ref.current) ref.current.style.height = 'auto';
+  };
+
+  const uploadImageFile = async (file) => {
+    if (!file?.type?.startsWith('image/')) {
+      throw new Error('只能上传图片');
+    }
+    const result = await API.upload(file);
+    return result.url;
   };
 
   const uploadImage = async (e) => {
@@ -268,10 +282,57 @@ function Composer({ channelName, onSend, error, typingText, members = [] }) {
     setUploading(true);
     setUploadError('');
     try {
-      const result = await API.upload(file);
-      await onSend(result.url);
+      const url = await uploadImageFile(file);
+      await onSend(url);
     } catch (err) {
       setUploadError(err.message || '图片上传失败');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const insertIntoComposer = (text) => {
+    const ta = ref.current;
+    setVal(prev => {
+      if (!ta) return prev ? `${prev}\n${text}` : text;
+      const start = ta.selectionStart ?? prev.length;
+      const end = ta.selectionEnd ?? start;
+      const before = prev.slice(0, start);
+      const after = prev.slice(end);
+      const prefix = before && !before.endsWith('\n') ? '\n' : '';
+      const suffix = after && !text.endsWith('\n') ? '\n' : '';
+      const next = `${before}${prefix}${text}${suffix}${after}`;
+      const caret = before.length + prefix.length + text.length;
+      window.setTimeout(() => {
+        ta.focus();
+        ta.selectionStart = caret;
+        ta.selectionEnd = caret;
+        resizeComposer(ta);
+      }, 0);
+      return next;
+    });
+    setMentionOpen(false);
+  };
+
+  const onPaste = async (e) => {
+    const items = Array.from(e.clipboardData?.items || []);
+    const files = items
+      .filter(item => item.kind === 'file' && item.type.startsWith('image/'))
+      .map(item => item.getAsFile())
+      .filter(Boolean);
+    if (!files.length) return;
+
+    e.preventDefault();
+    setUploading(true);
+    setUploadError('');
+    try {
+      const urls = [];
+      for (const file of files) {
+        urls.push(await uploadImageFile(file));
+      }
+      insertIntoComposer(urls.join('\n'));
+    } catch (err) {
+      setUploadError(err.message || '图片粘贴上传失败');
     } finally {
       setUploading(false);
     }
@@ -314,10 +375,18 @@ function Composer({ channelName, onSend, error, typingText, members = [] }) {
     API.sendTyping(true);
     if (stopTypingRef.current) window.clearTimeout(stopTypingRef.current);
     stopTypingRef.current = window.setTimeout(() => API.sendTyping(false), 2000);
-    const ta = e.target;
-    ta.style.height = 'auto';
-    ta.style.height = Math.min(200, ta.scrollHeight) + 'px';
+    resizeComposer(e.target);
   };
+
+  useEffectChat(function bindPasteImages() {
+    const ta = ref.current;
+    if (!ta) return undefined;
+    const handlePaste = event => onPaste(event);
+    ta.addEventListener('paste', handlePaste);
+    return function unbindPasteImages() {
+      ta.removeEventListener('paste', handlePaste);
+    };
+  }, [onPaste]);
 
   useEffectChat(function cleanupTypingTimer() {
     return function cleanup() {
