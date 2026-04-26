@@ -1455,7 +1455,7 @@ function ProfileCard({ member, position, onClose, onOpenDM }) {
 }
 
 /* Settings */
-function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDensity, sendMode = 'enter', setSendMode, initialSection = 'appearance', user, onLogout }) {
+function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDensity, sendMode = 'enter', setSendMode, initialSection = 'appearance', user, onLogout, reduceMotion, setReduceMotion, fontSize, setFontSize, alwaysTimestamps, setAlwaysTimestamps, blurImages, setBlurImages }) {
   const [section, setSection] = useStateM(initialSection || 'appearance');
 
   useEffectM(function syncInitialSettingsSection() {
@@ -1682,20 +1682,54 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
         {section === 'accessibility' && (
           <>
             <h1>辅助功能</h1>
-            {[
-              { t: '减少动画效果', d: '减少界面过渡动画和动态表情的播放。' },
-              { t: '增大消息字号', d: '仅增大聊天消息区域的字体大小 2pt。' },
-              { t: '始终显示时间戳', d: '在每条消息旁始终显示发送时间。' },
-              { t: '图片点击前模糊', d: '图片默认模糊显示，点击后才呈现原图。' },
-            ].map((r, i) => (
-              <div className="settings-row" key={i}>
-                <div className="label-block">
-                  <div className="title">{r.t}</div>
-                  <div className="desc">{r.d}</div>
-                </div>
-                <ToggleSwitch defaultOn={i === 2}/>
+
+            <div className="settings-row">
+              <div className="label-block">
+                <div className="title">减少动画效果</div>
+                <div className="desc">禁用界面过渡动画，提升低性能设备或敏感用户体验。</div>
               </div>
-            ))}
+              <ToggleSwitch defaultOn={reduceMotion} onChange={val => setReduceMotion?.(val)}/>
+            </div>
+
+            <div className="settings-section" style={{ marginTop: 20 }}>
+              <div className="settings-row">
+                <div className="label-block">
+                  <div className="title">网站字体大小</div>
+                  <div className="desc">调节整个界面的字体缩放比例（80% - 130%）。</div>
+                </div>
+              </div>
+              <div className="font-size-slider-row">
+                <span style={{ fontSize: 12, color: 'var(--ink-2)', minWidth: 26 }}>80%</span>
+                <input
+                  type="range" min={80} max={130} step={5}
+                  value={fontSize ?? 100}
+                  onChange={e => setFontSize?.(Number(e.target.value))}
+                />
+                <span style={{ fontSize: 12, color: 'var(--ink-2)', minWidth: 26, textAlign: 'right' }}>130%</span>
+                <span className="size-label">{fontSize ?? 100}%</span>
+                <button
+                  className="btn btn-ghost"
+                  style={{ height: 28, padding: '0 10px', fontSize: 12, marginLeft: 4 }}
+                  onClick={() => setFontSize?.(100)}
+                >重置</button>
+              </div>
+            </div>
+
+            <div className="settings-row" style={{ marginTop: 20 }}>
+              <div className="label-block">
+                <div className="title">始终显示时间戳</div>
+                <div className="desc">在每条连续消息旁始终显示发送时间，不再需要鼠标悬停才能看到。</div>
+              </div>
+              <ToggleSwitch defaultOn={alwaysTimestamps} onChange={val => setAlwaysTimestamps?.(val)}/>
+            </div>
+
+            <div className="settings-row" style={{ marginTop: 20 }}>
+              <div className="label-block">
+                <div className="title">图片点击前模糊</div>
+                <div className="desc">聊天中的图片默认模糊显示，点击图片后才呈现原图。</div>
+              </div>
+              <ToggleSwitch defaultOn={blurImages} onChange={val => setBlurImages?.(val)}/>
+            </div>
           </>
         )}
 

@@ -178,6 +178,10 @@ function App() {
   const [accent, setAccent] = useStateApp(init('accent', 'teal'));
   const [density, setDensity] = useStateApp(init('density', 'default'));
   const [sendMode, setSendMode] = useStateApp(init('send-mode', 'enter'));
+  const [reduceMotion, setReduceMotion] = useStateApp(init('reduce-motion', false));
+  const [fontSize, setFontSize] = useStateApp(init('font-size', 100));
+  const [alwaysTimestamps, setAlwaysTimestamps] = useStateApp(init('always-timestamps', false));
+  const [blurImages, setBlurImages] = useStateApp(init('blur-images', false));
   const [activeServerId, setActiveServerId] = useStateApp(init('server', 'bookclub'));
   const [activeChannelId, setActiveChannelId] = useStateApp(init('channel', 'the-drifting'));
   const [activeDMId, setActiveDMId] = useStateApp(init('dm', 'dm-wen'));
@@ -369,10 +373,28 @@ function App() {
   useEffectApp(() => { localStorage.setItem('hearth-accent', JSON.stringify(accent)); }, [accent]);
   useEffectApp(() => { localStorage.setItem('hearth-density', JSON.stringify(density)); }, [density]);
   useEffectApp(() => { localStorage.setItem('hearth-send-mode', JSON.stringify(sendMode)); }, [sendMode]);
+  useEffectApp(() => { localStorage.setItem('hearth-reduce-motion', JSON.stringify(reduceMotion)); }, [reduceMotion]);
+  useEffectApp(() => { localStorage.setItem('hearth-font-size', JSON.stringify(fontSize)); }, [fontSize]);
+  useEffectApp(() => { localStorage.setItem('hearth-always-timestamps', JSON.stringify(alwaysTimestamps)); }, [alwaysTimestamps]);
+  useEffectApp(() => { localStorage.setItem('hearth-blur-images', JSON.stringify(blurImages)); }, [blurImages]);
   useEffectApp(() => { localStorage.setItem('hearth-server', JSON.stringify(activeServerId)); }, [activeServerId]);
   useEffectApp(() => { localStorage.setItem('hearth-channel', JSON.stringify(activeChannelId)); }, [activeChannelId]);
   useEffectApp(() => { localStorage.setItem('hearth-dm', JSON.stringify(activeDMId)); }, [activeDMId]);
   useEffectApp(() => { localStorage.setItem('hearth-invite-decisions', JSON.stringify(inviteDecisions)); }, [inviteDecisions]);
+
+  useEffectApp(() => {
+    const handler = (e) => {
+      const img = e.target.closest?.('.image-previews img');
+      if (!img) return;
+      if (!img.hasAttribute('data-revealed')) {
+        e.preventDefault();
+        e.stopPropagation();
+        img.setAttribute('data-revealed', '1');
+      }
+    };
+    document.addEventListener('click', handler, true);
+    return () => document.removeEventListener('click', handler, true);
+  }, []);
 
   useEffectApp(() => {
     const h = (e) => {
@@ -953,7 +975,7 @@ function App() {
   }
 
   return (
-    <div className={`app theme-${theme} density-${density}`} style={rootStyle}>
+    <div className={`app theme-${theme} density-${density}${reduceMotion ? ' reduce-motion' : ''}${alwaysTimestamps ? ' always-timestamps' : ''}${blurImages ? ' blur-images' : ''}`} style={{ ...rootStyle, zoom: fontSize / 100 }}>
       <ServerRail
         servers={serverRailItems}
         activeServer={activeServerId}
@@ -1213,6 +1235,10 @@ function App() {
           initialSection={settingsInitialSection}
           user={currentUserDisplay}
           onLogout={handleLogout}
+          reduceMotion={reduceMotion} setReduceMotion={setReduceMotion}
+          fontSize={fontSize} setFontSize={setFontSize}
+          alwaysTimestamps={alwaysTimestamps} setAlwaysTimestamps={setAlwaysTimestamps}
+          blurImages={blurImages} setBlurImages={setBlurImages}
         />
       )}
 
