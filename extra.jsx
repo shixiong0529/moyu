@@ -56,7 +56,7 @@ function TweaksPanel({ active, theme, setTheme, accent, setAccent, density, setD
 }
 
 /* DM chat view — reuses chat components but with a header showing the friend */
-function DMView({ dm, messages, onSend, onOpenProfile, currentUser, inviteDecisions = {}, onAcceptInvite, onRejectInvite, sendError }) {
+function DMView({ dm, messages, onSend, onOpenProfile, currentUser, inviteDecisions = {}, onAcceptInvite, onRejectInvite, sendError, sendMode }) {
   if (!dm) {
     return (
       <div className="chat">
@@ -111,7 +111,7 @@ function DMView({ dm, messages, onSend, onOpenProfile, currentUser, inviteDecisi
           />
         ))}
       </div>
-      <Composer channelName={dm.name} onSend={onSend} error={sendError}/>
+      <Composer channelName={dm.name} onSend={onSend} error={sendError} sendMode={sendMode}/>
     </div>
   );
 }

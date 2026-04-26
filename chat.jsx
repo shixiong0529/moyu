@@ -161,12 +161,14 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
             {inviteLink && (onAcceptInvite || onRejectInvite) && (
               <div className="dm-invite-card">
                 <div>
-                  <div className="dm-invite-title">频道邀请</div>
-                  <div className="dm-invite-sub">接受后会加入服务器并进入对应频道。</div>
+                  <div className="dm-invite-title">服务器邀请</div>
+                  <div className="dm-invite-sub">接受后会加入服务器；如需审核，会进入申请列表。</div>
                 </div>
                 <div className="dm-invite-actions">
                   {inviteDecision === 'accepted' ? (
                     <span className="dm-invite-status">已接受</span>
+                  ) : inviteDecision === 'pending' ? (
+                    <span className="dm-invite-status">待管理员审核</span>
                   ) : inviteDecision === 'rejected' ? (
                     <span className="dm-invite-status">已拒绝</span>
                   ) : (
@@ -234,7 +236,7 @@ const EMOJI_CATEGORIES = [
   { label: '符号', icon: '🕯', emojis: ['🕯','💭','👀','🎉','🔴','🟠','🟡','🟢','🔵','🟣','⚫','⚪','🟤','💯','❗','❓','💬','🗨️','💤','♻️'] },
 ];
 
-function Composer({ channelName, onSend, error, typingText, members = [] }) {
+function Composer({ channelName, onSend, error, typingText, members = [], sendMode = 'enter' }) {
   const [val, setVal] = useStateChat('');
   const [uploading, setUploading] = useStateChat(false);
   const [uploadError, setUploadError] = useStateChat('');
@@ -346,6 +348,11 @@ function Composer({ channelName, onSend, error, typingText, members = [] }) {
   };
 
   const onKey = (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'u') {
+      e.preventDefault();
+      fileRef.current?.click();
+      return;
+    }
     if (mentionOpen && e.key === 'ArrowDown') {
       e.preventDefault();
       setMentionIndex(i => Math.min(i + 1, mentionOptions.length - 1));
@@ -361,7 +368,11 @@ function Composer({ channelName, onSend, error, typingText, members = [] }) {
       insertMention();
       return;
     }
-    if (e.key === 'Enter' && !e.shiftKey) {
+    const modifier = e.ctrlKey || e.metaKey;
+    const shouldSend = sendMode === 'ctrl-enter'
+      ? e.key === 'Enter' && modifier
+      : e.key === 'Enter' && !e.shiftKey;
+    if (shouldSend) {
       e.preventDefault();
       submit();
     }
@@ -500,7 +511,7 @@ function Composer({ channelName, onSend, error, typingText, members = [] }) {
       </div>
       <div className="composer-foot">
         <span><span className="typing-dots"><i/><i/><i/></span><em style={{ fontStyle: 'italic', fontFamily: 'var(--ff-serif)' }}>{uploadError || error || (uploading ? '图片上传中...' : typingText) || ''}</em></span>
-        <span>Shift + Enter 换行</span>
+        <span>{sendMode === 'ctrl-enter' ? 'Ctrl / Cmd + Enter 发送' : 'Shift + Enter 换行'}</span>
       </div>
     </div>
   );
@@ -577,7 +588,7 @@ function ThreadPanel({ rootMessage, replies, onClose, onSendReply }) {
   );
 }
 
-function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, searchValue, setSearchValue, sendError, typingText, currentUser, currentRole }) {
+function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, searchValue, setSearchValue, sendError, typingText, currentUser, currentRole, sendMode }) {
   const scrollRef = useRefChat(null);
   const [pinsOpen, setPinsOpen] = useStateChat(false);
   const [pins, setPins] = useStateChat([]);
@@ -664,7 +675,7 @@ function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, s
           onSendReply={(text, rootId) => onSend(text, { reply_to_id: rootId })}
         />
       )}
-      <Composer channelName={channel?.name || ''} onSend={onSend} error={sendError} typingText={typingText} members={members}/>
+      <Composer channelName={channel?.name || ''} onSend={onSend} error={sendError} typingText={typingText} members={members} sendMode={sendMode}/>
     </div>
   );
 }

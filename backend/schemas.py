@@ -25,6 +25,7 @@ class ServerSchema(BaseModel):
     icon_url: str | None = None
     description: str | None = None
     is_recommended: bool = False
+    join_policy: str = "approval"
     owner_id: int
     created_at: datetime | None = None
 
@@ -54,6 +55,7 @@ class ServerUpdateRequest(BaseModel):
     color: str | None = Field(default=None, pattern=r"^av-[1-8]$")
     icon_url: str | None = Field(default=None, max_length=256)
     description: str | None = Field(default=None, max_length=256)
+    join_policy: str | None = Field(default=None, pattern=r"^(open|closed|approval)$")
 
 
 class ServerJoinRequest(BaseModel):

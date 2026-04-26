@@ -7,9 +7,10 @@ function makeServerShortName(value) {
 }
 
 function Modal({ title, subtitle, children, onClose, footer, wide }) {
+  const modalStyle = wide === 'settings' ? { width: 760 } : wide === 'large' ? { width: 720 } : wide ? { width: 560 } : {};
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" style={wide ? { width: 560 } : {}} onClick={e => e.stopPropagation()}>
+      <div className="modal" style={modalStyle} onClick={e => e.stopPropagation()}>
         <div style={{ position: 'relative' }}>
           <div className="modal-head">
             <h2>{title}</h2>
@@ -125,7 +126,12 @@ function CreateServerModal({ onClose, onCreated }) {
       }
 
       if (code) {
-        joinedServer = await API.post('/api/servers/join', { code });
+        const result = await API.post('/api/servers/join', { code });
+        if (result.status === 'pending') {
+          pendingIds.push(result.server?.id || 'invite');
+        } else {
+          joinedServer = result.server || result;
+        }
       }
 
       if (joinedServer) {
@@ -444,6 +450,12 @@ function CreateGroupModal({ server, onClose, onCreated }) {
   );
 }
 
+function formatSettingsDate(value) {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return '未知';
+  return date.toLocaleString('zh-CN', { hour12: false });
+}
+
 function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
   const [section, setSection] = useStateM(server?._dangerOpen ? 'danger' : 'overview');
   const [name, setName] = useStateM(server?.name || '');
@@ -451,6 +463,9 @@ function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
   const [color, setColor] = useStateM(server?.color || 'av-1');
   const [iconUrl, setIconUrl] = useStateM(server?.icon_url || '');
   const [description, setDescription] = useStateM('');
+  const [joinPolicy, setJoinPolicy] = useStateM(server?.join_policy || 'approval');
+  const [owner, setOwner] = useStateM(server?.owner || null);
+  const [createdAt, setCreatedAt] = useStateM(server?.created_at || null);
   const [logoFile, setLogoFile] = useStateM(null);
   const [logoPreview, setLogoPreview] = useStateM('');
   const [deleteConfirm, setDeleteConfirm] = useStateM('');
@@ -470,6 +485,9 @@ function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
         setColor(detail.color || 'av-1');
         setIconUrl(detail.icon_url || detail.logo_url || '');
         setDescription(detail.description || '');
+        setJoinPolicy(detail.join_policy || 'approval');
+        setOwner(detail.owner || null);
+        setCreatedAt(detail.created_at || null);
       })
       .catch(() => {});
     return function cancelLoadServerSettingsDetail() {
@@ -510,6 +528,7 @@ function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
         color,
         icon_url: nextIconUrl,
         description: description.trim() || null,
+        join_policy: joinPolicy,
       });
       await onUpdated?.(updated);
     } catch (err) {
@@ -534,7 +553,7 @@ function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
   };
 
   return (
-    <Modal title="服务器设置" subtitle={server?.name || ''} onClose={onClose} wide>
+    <Modal title="服务器设置" subtitle={server?.name || ''} onClose={onClose} wide="settings">
       <div style={{ display: 'flex', minHeight: 420, margin: '-18px -24px -20px' }}>
         <div style={{
           width: 160,
@@ -555,6 +574,20 @@ function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
           >
             概览
           </button>
+          {isFounder && (
+            <button
+              className={`settings-nav-btn ${section === 'permissions' ? 'active' : ''}`}
+              style={{
+                width: '100%', height: 34, border: 0, borderRadius: 6, textAlign: 'left',
+                padding: '0 10px', marginBottom: 6, cursor: 'pointer',
+                background: section === 'permissions' ? 'var(--paper-2)' : 'transparent',
+                color: 'var(--ink-1)',
+              }}
+              onClick={() => setSection('permissions')}
+            >
+              权限
+            </button>
+          )}
           {isFounder && (
             <button
               className={`settings-nav-btn ${section === 'danger' ? 'active' : ''}`}
@@ -629,6 +662,49 @@ function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
                 placeholder="简单介绍这个服务器..."
               />
 
+              <div className="server-meta-grid">
+                <div>
+                  <span>创建人</span>
+                  <strong>{owner?.username || (server?.owner_id ? `用户 #${server.owner_id}` : '未知')}</strong>
+                </div>
+                <div>
+                  <span>创建时间</span>
+                  <strong>{formatSettingsDate(createdAt || server?.created_at)}</strong>
+                </div>
+              </div>
+
+              {error && <div className="form-hint" style={{ color: 'var(--rust)' }}>{error}</div>}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+                <button className="btn btn-ghost" onClick={onClose}>取消</button>
+                <button className="btn btn-primary" disabled={!canSave} onClick={saveChanges}>
+                  {loading ? '保存中...' : '保存更改'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {section === 'permissions' && isFounder && (
+            <>
+              <h3 style={{ margin: '0 0 16px', color: 'var(--ink-0)' }}>权限</h3>
+              <p className="form-hint" style={{ marginTop: -8, marginBottom: 18 }}>
+                控制新用户如何加入这个服务器。管理员审核由服务器创建人处理。
+              </p>
+              <div className="join-policy-options">
+                {[
+                  ['open', '允许任何用户自由加入', '用户通过推荐列表或邀请链接可以直接进入服务器。'],
+                  ['closed', '任何用户都不能加入', '新用户无法通过申请或邀请链接加入。'],
+                  ['approval', '需要管理员审核加入', '用户申请加入或接受邀请后，会先进入审核申请列表。'],
+                ].map(([value, title, desc]) => (
+                  <button
+                    key={value}
+                    className={joinPolicy === value ? 'active' : ''}
+                    onClick={() => setJoinPolicy(value)}
+                  >
+                    <span>{title}</span>
+                    <em>{desc}</em>
+                  </button>
+                ))}
+              </div>
               {error && <div className="form-hint" style={{ color: 'var(--rust)' }}>{error}</div>}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
                 <button className="btn btn-ghost" onClick={onClose}>取消</button>
@@ -691,7 +767,8 @@ function ChannelInviteModal({ server, channel, onClose }) {
   const [invite, setInvite] = useStateM(null);
   const [friends, setFriends] = useStateM([]);
   const [query, setQuery] = useStateM('');
-  const [sentTo, setSentTo] = useStateM(null);
+  const [sentTo, setSentTo] = useStateM({});
+  const [copied, setCopied] = useStateM(false);
   const [error, setError] = useStateM('');
   const baseLink = invite?.web_url || API.inviteWebUrl(invite?.code);
   const link = baseLink && channel?.id
@@ -725,8 +802,8 @@ function ChannelInviteModal({ server, channel, onClose }) {
     if (!link) return;
     try {
       await navigator.clipboard.writeText(link);
-      setSentTo('copied');
-      window.setTimeout(() => setSentTo(null), 1400);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
     } catch {
       setError('复制失败，请手动复制链接');
     }
@@ -739,8 +816,7 @@ function ChannelInviteModal({ server, channel, onClose }) {
       await API.post(`/api/dm/${friend.id}/messages`, {
         content: `邀请你加入 ${server.name} 的 #${channel.name} 频道：${link}`,
       });
-      setSentTo(friend.id);
-      window.setTimeout(() => setSentTo(null), 1600);
+      setSentTo(prev => ({ ...prev, [friend.id]: true }));
     } catch (err) {
       setError(err.message || '发送邀请失败');
     }
@@ -794,12 +870,12 @@ function ChannelInviteModal({ server, channel, onClose }) {
               <div style={{ fontSize: 12, color: 'var(--ink-2)' }}>@{friend.username}</div>
             </div>
             <button
-              className={`btn ${sentTo === friend.id ? 'btn-secondary' : 'btn-primary'}`}
+              className={`btn ${sentTo[friend.id] ? 'btn-secondary' : 'btn-primary'}`}
               style={{ height: 30, padding: '0 16px', fontSize: 13, flexShrink: 0, minWidth: 58 }}
-              disabled={!link || sentTo === friend.id}
+              disabled={!link || sentTo[friend.id]}
               onClick={() => inviteFriend(friend)}
             >
-              {sentTo === friend.id ? '已发送 ✓' : '邀请'}
+              {sentTo[friend.id] ? '已邀请' : '邀请'}
             </button>
           </div>
         ))}
@@ -827,7 +903,7 @@ function ChannelInviteModal({ server, channel, onClose }) {
           onClick={copyLink}
           style={{ height: 42, padding: '0 18px', fontSize: 13, flexShrink: 0 }}
         >
-          {sentTo === 'copied' ? '已复制 ✓' : '复制链接'}
+          {copied ? '已复制 ✓' : '复制链接'}
         </button>
       </div>
       <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 8 }}>
@@ -976,9 +1052,16 @@ function ChannelEditModal({ server, channel, onClose, onUpdated, onDeleted }) {
 
 function InviteModal({ server, onClose }) {
   const [invite, setInvite] = useStateM(null);
+  const [friends, setFriends] = useStateM([]);
+  const [query, setQuery] = useStateM('');
   const [copied, setCopied] = useStateM(false);
+  const [sentTo, setSentTo] = useStateM({});
   const [error, setError] = useStateM('');
   const link = invite?.web_url || API.inviteWebUrl(invite?.code);
+  const visibleFriends = friends.filter(friend => {
+    const text = `${friend.display_name} ${friend.username}`.toLowerCase();
+    return text.includes(query.trim().toLowerCase());
+  });
 
   const generateInvite = async () => {
     if (!server?.id) return;
@@ -994,6 +1077,7 @@ function InviteModal({ server, onClose }) {
 
   React.useEffect(() => {
     generateInvite();
+    API.get('/api/friends').then(setFriends).catch(() => setFriends([]));
   }, [server?.id]);
 
   const copyLink = async () => {
@@ -1007,22 +1091,56 @@ function InviteModal({ server, onClose }) {
     }
   };
 
+  const inviteFriend = async (friend) => {
+    if (!link) return;
+    setError('');
+    try {
+      await API.post(`/api/dm/${friend.id}/messages`, {
+        content: `邀请你加入 ${server.name}：${link}`,
+      });
+      setSentTo(prev => ({ ...prev, [friend.id]: true }));
+    } catch (err) {
+      setError(err.message || '发送邀请失败');
+    }
+  };
+
   return (
     <Modal
       title="邀请成员"
       subtitle={server?.name || ''}
       onClose={onClose}
-      footer={
-        <>
-          <button className="btn btn-ghost" onClick={generateInvite}>重新生成</button>
-          <button className="btn btn-primary" disabled={!link} onClick={copyLink}>{copied ? '已复制！' : '复制链接'}</button>
-        </>
-      }
+      wide
     >
+      <div className="search-box" style={{ height: 42, marginBottom: 14 }}>
+        <Icon name="search" size={14}/>
+        <input placeholder="搜索好友" value={query} onChange={e => setQuery(e.target.value)}/>
+      </div>
+      <div style={{ minHeight: 120, maxHeight: 220, overflowY: 'auto', marginBottom: 16 }}>
+        {visibleFriends.length === 0 ? (
+          <div className="form-hint">暂无可邀请的好友。</div>
+        ) : visibleFriends.map(friend => (
+          <div key={friend.id} className="channel-invite-friend">
+            <div className={`avatar ${friend.avatar_color || 'av-1'}`}>
+              <span className={`status-dot ${friend.status || 'offline'}`}/>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="friend-name">{friend.display_name}</div>
+              <div className="friend-sub">@{friend.username}</div>
+            </div>
+            <button className="btn btn-secondary" disabled={!link || sentTo[friend.id]} onClick={() => inviteFriend(friend)}>
+              {sentTo[friend.id] ? '已邀请' : '邀请'}
+            </button>
+          </div>
+        ))}
+      </div>
       <label className="form-label">邀请链接</label>
       <input className="form-input" value={link || '正在生成...'} readOnly onFocus={e => e.target.select()}/>
       <div className="form-hint">邀请码：{invite?.code || '...'} · 协议链接：{invite?.url || '...'}</div>
       {error && <div className="form-hint" style={{ color: 'var(--rust)' }}>{error}</div>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
+        <button className="btn btn-ghost" onClick={generateInvite}>重新生成</button>
+        <button className="btn btn-primary" disabled={!link} onClick={copyLink}>{copied ? '已复制！' : '复制链接'}</button>
+      </div>
     </Modal>
   );
 }
@@ -1062,7 +1180,7 @@ function JoinRequestsModal({ server, onClose, onChanged }) {
 
   return (
     <Modal
-      title="加入申请"
+      title="审核申请"
       subtitle={server?.name || ''}
       onClose={onClose}
       footer={<button className="btn btn-ghost" onClick={onClose}>关闭</button>}
@@ -1219,6 +1337,44 @@ function FriendRequestsModal({ onClose, onChanged }) {
   );
 }
 
+function ConfirmLeaveServerModal({ server, onClose, onConfirm }) {
+  const [loading, setLoading] = useStateM(false);
+  const [error, setError] = useStateM('');
+
+  const confirm = async () => {
+    if (loading) return;
+    setLoading(true);
+    setError('');
+    try {
+      await onConfirm?.();
+    } catch (err) {
+      setError(err.message || '退出服务器失败');
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="退出服务器"
+      subtitle={server?.name || ''}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>取消</button>
+          <button className="btn btn-primary danger" onClick={confirm} disabled={loading}>
+            {loading ? '退出中...' : '退出服务器'}
+          </button>
+        </>
+      }
+    >
+      <p className="form-hint" style={{ fontSize: 15, lineHeight: 1.6 }}>
+        确定要退出 <strong style={{ color: 'var(--rust)' }}>{server?.name}</strong> 吗？退出后你将无法继续查看这个服务器里的频道和消息。
+      </p>
+      {error && <div className="form-hint" style={{ color: 'var(--rust)' }}>{error}</div>}
+    </Modal>
+  );
+}
+
 /* Profile card popover, positioned by caller */
 function ProfileCard({ member, position, onClose, onOpenDM }) {
   const style = {
@@ -1291,8 +1447,12 @@ function ProfileCard({ member, position, onClose, onOpenDM }) {
 }
 
 /* Settings */
-function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDensity, user, onLogout }) {
-  const [section, setSection] = useStateM('appearance');
+function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDensity, sendMode = 'enter', setSendMode, initialSection = 'appearance', user, onLogout }) {
+  const [section, setSection] = useStateM(initialSection || 'appearance');
+
+  useEffectM(function syncInitialSettingsSection() {
+    setSection(initialSection || 'appearance');
+  }, [initialSection]);
 
   // ── Telegram state ─────────────────────────────────────────────────────────
   const { useEffect: useEffectTg } = React;
@@ -1375,7 +1535,7 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
         <div className="settings-sidebar-divider"/>
 
         <div className="group-label">其他</div>
-        <a>快捷键</a>
+        <a className={section === 'shortcuts' ? 'active' : ''} onClick={() => setSection('shortcuts')}>快捷键</a>
         <a>语言</a>
         <a className="danger" onClick={onLogout}>退出</a>
       </div>
@@ -1531,6 +1691,47 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
           </>
         )}
 
+        {section === 'shortcuts' && (
+          <>
+            <h1>快捷键</h1>
+            <p style={{ color: 'var(--ink-2)', marginTop: -16, marginBottom: 20 }}>
+              常用操作可以通过键盘快速完成。
+            </p>
+
+            <div className="settings-section">
+              <div className="settings-row">
+                <div className="label-block">
+                  <div className="title">发送行为</div>
+                  <div className="desc">选择消息输入框里按 Enter 的默认行为。</div>
+                </div>
+              </div>
+              <div className="shortcut-choice">
+                <button className={sendMode === 'enter' ? 'active' : ''} onClick={() => setSendMode?.('enter')}>
+                  <span>Enter 发送</span>
+                  <em>Shift + Enter 换行</em>
+                </button>
+                <button className={sendMode === 'ctrl-enter' ? 'active' : ''} onClick={() => setSendMode?.('ctrl-enter')}>
+                  <span>Ctrl / Cmd + Enter 发送</span>
+                  <em>Enter 换行</em>
+                </button>
+              </div>
+            </div>
+
+            <ShortcutGroup title="消息" items={[
+              ['Enter', sendMode === 'enter' ? '发送消息' : '换行'],
+              ['Shift + Enter', sendMode === 'enter' ? '换行' : '换行'],
+              ['Ctrl / Cmd + Enter', sendMode === 'ctrl-enter' ? '发送消息' : '发送消息'],
+              ['Ctrl / Cmd + V', '粘贴图片'],
+              ['Ctrl / Cmd + U', '上传图片'],
+            ]}/>
+            <ShortcutGroup title="导航" items={[
+              ['Ctrl / Cmd + K', '快速跳转'],
+              ['Ctrl / Cmd + /', '打开快捷键'],
+              ['Esc', '关闭弹窗或菜单'],
+            ]}/>
+          </>
+        )}
+
         {section === 'notifications' && (
           <>
             <h1>Telegram 推送</h1>
@@ -1616,6 +1817,20 @@ function ToggleSwitch({ defaultOn = false, onChange }) {
   );
 }
 
+function ShortcutGroup({ title, items }) {
+  return (
+    <div className="settings-section shortcut-group">
+      <div className="shortcut-group-title">{title}</div>
+      {items.map(([keys, label]) => (
+        <div className="shortcut-row" key={`${title}-${keys}-${label}`}>
+          <span>{label}</span>
+          <kbd>{keys}</kbd>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 Object.assign(window, {
   Modal,
   CreateServerModal,
@@ -1626,6 +1841,7 @@ Object.assign(window, {
   ChannelEditModal,
   InviteModal,
   JoinRequestsModal,
+  ConfirmLeaveServerModal,
   FriendRequestsModal,
   ProfileCard,
   Settings,

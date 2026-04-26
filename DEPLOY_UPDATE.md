@@ -49,6 +49,42 @@ sudo journalctl -u biscord -n 80 --no-pager -l
 sudo journalctl -u biscord -f
 ```
 
+## 查看服务器状态
+
+Biscord 服务：
+
+```bash
+sudo systemctl status biscord --no-pager
+curl https://shi.show/api/health
+```
+
+Nginx 服务：
+
+```bash
+sudo systemctl status nginx --no-pager
+sudo nginx -t
+```
+
+PostgreSQL 服务：
+
+```bash
+sudo systemctl status postgresql --no-pager
+psql "postgresql://biscord:Biscord_2026_Strong_Pass@127.0.0.1:5432/biscord" -c "select current_database(), current_user;"
+```
+
+端口监听：
+
+```bash
+sudo ss -lntp | grep -E ":80|:443|:8000|:8001|:5432"
+```
+
+最近错误日志：
+
+```bash
+sudo journalctl -u biscord -n 100 --no-pager -l
+sudo tail -n 80 /var/log/nginx/error.log
+```
+
 ## 服务管理
 
 ```bash

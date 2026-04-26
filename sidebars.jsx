@@ -92,10 +92,10 @@ function ServerRail({
           <div className="server-menu-backdrop" onClick={() => setMenu(null)}/>
           <div className="server-context-menu" style={{ left: menu.x, top: menu.y }}>
             <button onClick={() => { onInvite?.(menu.server); setMenu(null); }}>邀请成员</button>
-            {['founder', 'mod'].includes(menu.server.role) && (
+            {menu.server.role === 'founder' && (
               <>
                 <button onClick={() => { onReviewRequests?.(menu.server); setMenu(null); }}>
-                  加入申请{menu.server.pending_join_requests ? `（${menu.server.pending_join_requests}）` : ''}
+                  审核申请{menu.server.pending_join_requests ? `（${menu.server.pending_join_requests}）` : ''}
                 </button>
                 <div style={{ height: 1, background: 'var(--paper-3)', margin: '4px 0' }}/>
                 <button onClick={() => { onCreateChannel?.(menu.server); setMenu(null); }}>创建频道</button>

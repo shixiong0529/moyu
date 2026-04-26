@@ -28,6 +28,10 @@ function apiServerToRail(server) {
     color: server.color,
     icon_url: server.logo_url || API.assetUrl(server.icon_url),
     role: server.role,
+    owner_id: server.owner_id,
+    owner: server.owner,
+    created_at: server.created_at,
+    join_policy: server.join_policy,
     pending_join_requests: server.pending_join_requests || 0,
   };
 }
@@ -172,6 +176,7 @@ function App() {
   const [theme, setTheme] = useStateApp(init('theme', 'dark'));
   const [accent, setAccent] = useStateApp(init('accent', 'teal'));
   const [density, setDensity] = useStateApp(init('density', 'default'));
+  const [sendMode, setSendMode] = useStateApp(init('send-mode', 'enter'));
   const [activeServerId, setActiveServerId] = useStateApp(init('server', 'bookclub'));
   const [activeChannelId, setActiveChannelId] = useStateApp(init('channel', 'the-drifting'));
   const [activeDMId, setActiveDMId] = useStateApp(init('dm', 'dm-wen'));
@@ -191,9 +196,12 @@ function App() {
   const [channelEditOpen, setChannelEditOpen] = useStateApp(null);
   const [inviteServer, setInviteServer] = useStateApp(null);
   const [joinRequestsServer, setJoinRequestsServer] = useStateApp(null);
+  const [leaveServerOpen, setLeaveServerOpen] = useStateApp(null);
   const [friendRequestsOpen, setFriendRequestsOpen] = useStateApp(false);
   const [friendsInitialTab, setFriendsInitialTab] = useStateApp('all');
   const [settingsOpen, setSettingsOpen] = useStateApp(false);
+  const [settingsInitialSection, setSettingsInitialSection] = useStateApp('appearance');
+  const [quickSwitchOpen, setQuickSwitchOpen] = useStateApp(false);
   const [telegramOpen, setTelegramOpen] = useStateApp(false);
   const [profileCard, setProfileCard] = useStateApp(null);
   const [muted, setMuted] = useStateApp(false);
@@ -282,7 +290,13 @@ function App() {
     if (!code) return;
     inviteHandledRef.current = true;
     API.post('/api/servers/join', { code })
-      .then(async server => {
+      .then(async result => {
+        const server = result?.server || result;
+        if (result?.status === 'pending') {
+          await refreshServers();
+          window.history.replaceState({}, document.title, window.location.pathname);
+          return;
+        }
         await enterServer(server);
         if (inviteChannelId) setActiveChannelId(inviteChannelId);
         window.history.replaceState({}, document.title, window.location.pathname);
@@ -353,6 +367,7 @@ function App() {
   useEffectApp(() => { localStorage.setItem('hearth-theme', JSON.stringify(theme)); }, [theme]);
   useEffectApp(() => { localStorage.setItem('hearth-accent', JSON.stringify(accent)); }, [accent]);
   useEffectApp(() => { localStorage.setItem('hearth-density', JSON.stringify(density)); }, [density]);
+  useEffectApp(() => { localStorage.setItem('hearth-send-mode', JSON.stringify(sendMode)); }, [sendMode]);
   useEffectApp(() => { localStorage.setItem('hearth-server', JSON.stringify(activeServerId)); }, [activeServerId]);
   useEffectApp(() => { localStorage.setItem('hearth-channel', JSON.stringify(activeChannelId)); }, [activeChannelId]);
   useEffectApp(() => { localStorage.setItem('hearth-dm', JSON.stringify(activeDMId)); }, [activeDMId]);
@@ -361,9 +376,11 @@ function App() {
   useEffectApp(() => {
     const h = (e) => {
       if (e.key !== 'Escape') return;
-      if (settingsOpen) setSettingsOpen(false);
+      if (quickSwitchOpen) setQuickSwitchOpen(false);
+      else if (settingsOpen) setSettingsOpen(false);
       else if (channelEditOpen) setChannelEditOpen(null);
       else if (channelInviteOpen) setChannelInviteOpen(null);
+      else if (leaveServerOpen) setLeaveServerOpen(null);
       else if (serverSettingsOpen) setServerSettingsOpen(null);
       else if (createGroupOpen) setCreateGroupOpen(false);
       else if (createOpen) setCreateOpen(false);
@@ -371,7 +388,28 @@ function App() {
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [settingsOpen, channelEditOpen, channelInviteOpen, serverSettingsOpen, createGroupOpen, createOpen, profileCard]);
+  }, [quickSwitchOpen, settingsOpen, channelEditOpen, channelInviteOpen, leaveServerOpen, serverSettingsOpen, createGroupOpen, createOpen, profileCard]);
+
+  useEffectApp(() => {
+    const h = (e) => {
+      const modifier = e.ctrlKey || e.metaKey;
+      if (!modifier) return;
+      const target = e.target;
+      const inEditable = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
+      if (e.key === '/') {
+        e.preventDefault();
+        setSettingsInitialSection('shortcuts');
+        setSettingsOpen(true);
+        return;
+      }
+      if (e.key.toLowerCase() === 'k' && !inEditable) {
+        e.preventDefault();
+        setQuickSwitchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, []);
 
   useEffectApp(() => {
     const handler = (e) => {
@@ -834,8 +872,14 @@ function App() {
     if (!invite?.code) return;
     setSendError('');
     try {
-      const server = await API.post('/api/servers/join', { code: invite.code });
+      const result = await API.post('/api/servers/join', { code: invite.code });
+      if (result?.status === 'pending') {
+        markInviteDecision(message.id, 'pending');
+        await refreshServers();
+        return;
+      }
       markInviteDecision(message.id, 'accepted');
+      const server = result?.server || result;
       await enterServer(server);
       if (invite.channelId) setActiveChannelId(invite.channelId);
     } catch (err) {
@@ -928,7 +972,7 @@ function App() {
         }}
         onServerSettings={(server) => setServerSettingsOpen(server)}
         onDeleteServer={(server) => setServerSettingsOpen({ ...server, _dangerOpen: true })}
-        onLeave={handleLeaveServer}
+        onLeave={(server) => setLeaveServerOpen(server)}
       />
 
       <div style={{ width: 240, flex: '0 0 240px', display: 'flex', flexDirection: 'column', background: 'var(--paper-1)' }}>
@@ -955,7 +999,7 @@ function App() {
               onReviewRequests={() => setJoinRequestsServer(activeServer)}
               onCreateGroup={() => setCreateGroupOpen(true)}
               onServerSettings={() => setServerSettingsOpen(activeServer)}
-              onLeaveServer={() => handleLeaveServer(activeServer)}
+              onLeaveServer={() => setLeaveServerOpen(activeServer)}
               onDeleteServer={() => setServerSettingsOpen({ ...activeServer, _dangerOpen: true })}
               onInviteChannel={(channel) => setChannelInviteOpen(channel)}
               onEditChannel={(channel) => setChannelEditOpen(channel)}
@@ -967,7 +1011,7 @@ function App() {
           muted={muted} deafened={deafened}
           onToggleMute={() => setMuted(v => !v)}
           onToggleDeafen={() => setDeafened(v => !v)}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSettings={() => { setSettingsInitialSection('appearance'); setSettingsOpen(true); }}
           onOpenProfile={handleOpenSelf}
           onOpenTelegram={() => setTelegramOpen(v => !v)}
         />
@@ -1006,6 +1050,7 @@ function App() {
             inviteDecisions={inviteDecisions}
             onAcceptInvite={handleAcceptInvite}
             onRejectInvite={handleRejectInvite}
+            sendMode={sendMode}
             sendError={sendError}
           />
         )
@@ -1023,6 +1068,7 @@ function App() {
           typingText={typingText}
           currentUser={currentUserDisplay}
           currentRole={activeServer?.role}
+          sendMode={sendMode}
         />
       )}
 
@@ -1103,6 +1149,17 @@ function App() {
         />
       )}
 
+      {leaveServerOpen && (
+        <ConfirmLeaveServerModal
+          server={leaveServerOpen}
+          onClose={() => setLeaveServerOpen(null)}
+          onConfirm={async () => {
+            await handleLeaveServer(leaveServerOpen);
+            setLeaveServerOpen(null);
+          }}
+        />
+      )}
+
       {friendRequestsOpen && (
         <FriendRequestsModal
           onClose={() => setFriendRequestsOpen(false)}
@@ -1151,8 +1208,33 @@ function App() {
           theme={theme} setTheme={setTheme}
           accent={accent} setAccent={setAccent}
           density={density} setDensity={setDensity}
+          sendMode={sendMode} setSendMode={setSendMode}
+          initialSection={settingsInitialSection}
           user={currentUserDisplay}
           onLogout={handleLogout}
+        />
+      )}
+
+      {quickSwitchOpen && (
+        <QuickSwitchModal
+          servers={apiServers}
+          channelGroups={channelGroups}
+          friends={dmList}
+          activeServerId={activeServerId}
+          onClose={() => setQuickSwitchOpen(false)}
+          onSelect={(item) => {
+            if (item.type === 'channel') {
+              setActiveServerId(item.serverId);
+              setActiveChannelId(item.channel.id);
+            } else if (item.type === 'server') {
+              setActiveServerId(item.server.id);
+              setApiChannelGroups(null);
+            } else if (item.type === 'dm') {
+              setActiveServerId('dm');
+              setActiveDMId(item.dm.id);
+            }
+            setQuickSwitchOpen(false);
+          }}
         />
       )}
 
@@ -1167,6 +1249,88 @@ function App() {
         density={density} setDensity={setDensity}
         onClose={() => setTweaksOn(false)}
       />
+    </div>
+  );
+}
+
+function QuickSwitchModal({ servers = [], channelGroups = [], friends = [], activeServerId, onSelect, onClose }) {
+  const [query, setQuery] = React.useState('');
+  const inputRef = React.useRef(null);
+  const items = React.useMemo(() => {
+    const channelItems = (channelGroups || []).flatMap(group => (group.items || []).map(channel => ({
+      type: 'channel',
+      key: `channel-${channel.id}`,
+      title: `# ${channel.name}`,
+      subtitle: group.name || '当前服务器',
+      channel,
+      serverId: activeServerId,
+      icon: 'hash',
+    })));
+    const serverItems = (servers || []).map(server => ({
+      type: 'server',
+      key: `server-${server.id}`,
+      title: server.name,
+      subtitle: '服务器',
+      server,
+      icon: 'compass',
+    }));
+    const dmItems = (friends || []).map(dm => ({
+      type: 'dm',
+      key: `dm-${dm.id}`,
+      title: dm.name,
+      subtitle: dm.handle || '私信',
+      dm,
+      icon: 'message-circle',
+    }));
+    return [...channelItems, ...serverItems, ...dmItems];
+  }, [servers, channelGroups, friends, activeServerId]);
+  const visible = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items.slice(0, 12);
+    return items.filter(item => `${item.title} ${item.subtitle}`.toLowerCase().includes(q)).slice(0, 16);
+  }, [items, query]);
+
+  React.useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  React.useEffect(() => {
+    const h = (e) => {
+      if (e.key === 'Enter' && visible[0]) {
+        e.preventDefault();
+        onSelect?.(visible[0]);
+      }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [visible, onSelect]);
+
+  return (
+    <div className="quick-switch-backdrop" onClick={onClose}>
+      <div className="quick-switch" onClick={e => e.stopPropagation()}>
+        <div className="quick-switch-input">
+          <Icon name="search" size={16}/>
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="跳转到频道、服务器或私信"
+          />
+        </div>
+        <div className="quick-switch-list">
+          {visible.length ? visible.map(item => (
+            <button key={item.key} onClick={() => onSelect?.(item)}>
+              <Icon name={item.icon} size={16}/>
+              <span>
+                <strong>{item.title}</strong>
+                <em>{item.subtitle}</em>
+              </span>
+            </button>
+          )) : (
+            <div className="quick-switch-empty">没有找到结果</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1209,7 +1373,6 @@ function InlineChannelSidebar({
 }) {
   const [menuOpen, setMenuOpen] = React.useState(false);
   const groups = channelGroups || CHANNELS[server.id] || [];
-  const canManage = ['founder', 'mod'].includes(server?.role);
   const isFounder = server?.role === 'founder';
   const closeThen = (action) => {
     setMenuOpen(false);
@@ -1238,23 +1401,23 @@ function InlineChannelSidebar({
               onClick={(e) => e.stopPropagation()}
             >
               <MenuItem icon="users" label="邀请成员" onClick={() => closeThen(onInvite)} />
-              {canManage && (
+              {isFounder && (
                 <MenuItem
                   icon="inbox"
-                  label={`加入申请${server.pending_join_requests ? `（${server.pending_join_requests}）` : ''}`}
+                  label={`审核申请${server.pending_join_requests ? `（${server.pending_join_requests}）` : ''}`}
                   badge={server.pending_join_requests}
                   onClick={() => closeThen(onReviewRequests)}
                 />
               )}
-              {canManage && <MenuDivider />}
-              {canManage && (
+              {isFounder && <MenuDivider />}
+              {isFounder && (
                 <>
                   <MenuItem icon="hash" label="创建频道" onClick={() => closeThen(() => onCreateChannel?.({}))} />
                   <MenuItem icon="plus" label="创建分组" onClick={() => closeThen(onCreateGroup)} />
                 </>
               )}
-              {canManage && <MenuDivider />}
-              {canManage && (
+              {isFounder && <MenuDivider />}
+              {isFounder && (
                 <MenuItem icon="settings" label="服务器设置" onClick={() => closeThen(onServerSettings)} />
               )}
               <MenuDivider />
@@ -1273,7 +1436,9 @@ function InlineChannelSidebar({
           <React.Fragment key={gi}>
             <div className="section-label">
               <span>{g.group}</span>
-              <span className="plus" title="创建频道" onClick={(e) => { e.stopPropagation(); onCreateChannel?.(g); }}><Icon name="plus" size={14}/></span>
+              {isFounder && (
+                <span className="plus" title="创建频道" onClick={(e) => { e.stopPropagation(); onCreateChannel?.(g); }}><Icon name="plus" size={14}/></span>
+              )}
             </div>
             {g.items.map(ch => (
               <ChannelRowInline

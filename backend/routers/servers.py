@@ -44,11 +44,17 @@ def server_to_dict(
         "logo_url": public_asset_url(server.icon_url, request),
         "description": server.description,
         "is_recommended": server.is_recommended,
+        "join_policy": server.join_policy,
         "owner_id": server.owner_id,
+        "owner": {
+            "id": server.owner.id,
+            "username": server.owner.username,
+            "display_name": server.owner.display_name,
+        } if getattr(server, "owner", None) else None,
         "created_at": server.created_at,
         "role": role,
     }
-    if role in {"founder", "mod"}:
+    if role == "founder":
         data["pending_join_requests"] = len([request for request in server.join_requests if request.status == "pending"])
     if include_channels:
         groups = sorted(server.channel_groups, key=lambda group: group.position)
@@ -90,6 +96,13 @@ def require_manager(db: Session, server_id: int, user_id: int) -> ServerMember:
     member = require_member(db, server_id, user_id)
     if member.role not in {"founder", "mod"}:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="insufficient permissions")
+    return member
+
+
+def require_founder(db: Session, server_id: int, user_id: int) -> ServerMember:
+    member = require_member(db, server_id, user_id)
+    if member.role != "founder":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="only founder can manage join requests")
     return member
 
 
@@ -165,6 +178,8 @@ def update_server(
     member = require_manager(db, server_id, current_user.id)
 
     updates = payload.model_dump(exclude_unset=True)
+    if "join_policy" in updates and member.role != "founder":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="only founder can manage join policy")
     for field, value in updates.items():
         if isinstance(value, str):
             value = value.strip()
@@ -287,6 +302,14 @@ def create_join_request(
     if existing_member is not None:
         return {"status": "member", "server": server_to_dict(server, existing_member.role, request=request)}
 
+    if server.join_policy == "closed":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="server is not accepting new members")
+
+    if server.join_policy == "open":
+        db.add(ServerMember(server_id=server_id, user_id=current_user.id, role="member"))
+        db.commit()
+        return {"status": "member", "server": server_to_dict(server, "member", request=request)}
+
     existing_request = db.scalar(
         select(JoinRequest).where(
             JoinRequest.server_id == server_id,
@@ -331,7 +354,7 @@ def join_request_to_dict(join_request: JoinRequest) -> dict:
 
 @router.get("/{server_id}/join-requests")
 def list_join_requests(server_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_manager(db, server_id, current_user.id)
+    require_founder(db, server_id, current_user.id)
     requests = db.scalars(
         select(JoinRequest)
         .where(JoinRequest.server_id == server_id, JoinRequest.status == "pending")
@@ -348,7 +371,7 @@ def approve_join_request(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    require_manager(db, server_id, current_user.id)
+    require_founder(db, server_id, current_user.id)
     join_request = db.scalar(
         select(JoinRequest)
         .where(JoinRequest.id == request_id, JoinRequest.server_id == server_id)
@@ -383,7 +406,7 @@ def reject_join_request(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    require_manager(db, server_id, current_user.id)
+    require_founder(db, server_id, current_user.id)
     join_request = db.scalar(
         select(JoinRequest)
         .where(JoinRequest.id == request_id, JoinRequest.server_id == server_id)
@@ -402,7 +425,7 @@ def reject_join_request(
 
 @router.get("/{server_id}/members")
 def list_members(server_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_member(db, server_id, current_user.id)
+    require_manager(db, server_id, current_user.id)
     members = db.scalars(
         select(ServerMember)
         .where(ServerMember.server_id == server_id)
@@ -516,7 +539,7 @@ def create_invite(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    require_manager(db, server_id, current_user.id)
+    require_member(db, server_id, current_user.id)
     if db.get(Server, server_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="server not found")
 
@@ -577,6 +600,32 @@ def join_server(
         )
     )
     if existing is None:
+        if server.join_policy == "closed":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="server is not accepting new members")
+        if server.join_policy == "approval":
+            existing_request = db.scalar(
+                select(JoinRequest).where(
+                    JoinRequest.server_id == server.id,
+                    JoinRequest.user_id == current_user.id,
+                    JoinRequest.status == "pending",
+                )
+            )
+            if existing_request is None:
+                existing_request = JoinRequest(
+                    server_id=server.id,
+                    user_id=current_user.id,
+                    note="通过邀请链接申请加入" if invite else None,
+                )
+                db.add(existing_request)
+                if invite:
+                    invite.uses += 1
+                db.commit()
+                db.refresh(existing_request)
+            return {
+                "status": "pending",
+                "request": join_request_to_dict(existing_request),
+                "server": server_to_dict(server, request=request),
+            }
         db.add(ServerMember(server_id=server.id, user_id=current_user.id, role="member"))
         if invite:
             invite.uses += 1
