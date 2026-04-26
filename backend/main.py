@@ -11,7 +11,7 @@ from sqlalchemy import inspect, text
 
 from auth import get_current_user
 from database import engine
-from models import User
+from models import FriendRequest, Friendship, JoinRequest, User
 from routers import auth, channels, dm, friends, servers, users, websocket
 from routers import telegram_bot
 import telegram_service
@@ -54,50 +54,8 @@ def ensure_schema_compatibility() -> None:
             connection.execute(text("ALTER TABLE servers ADD COLUMN description VARCHAR(256)"))
         if "is_recommended" not in server_columns:
             connection.execute(text("ALTER TABLE servers ADD COLUMN is_recommended BOOLEAN NOT NULL DEFAULT 0"))
-        if inspector.has_table("join_requests") is False:
-            connection.execute(text("""
-                CREATE TABLE join_requests (
-                    id INTEGER NOT NULL PRIMARY KEY,
-                    server_id INTEGER NOT NULL,
-                    user_id INTEGER NOT NULL,
-                    status VARCHAR(16) NOT NULL DEFAULT 'pending',
-                    note VARCHAR(256),
-                    decided_by INTEGER,
-                    decided_at DATETIME,
-                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY(server_id) REFERENCES servers (id),
-                    FOREIGN KEY(user_id) REFERENCES users (id),
-                    FOREIGN KEY(decided_by) REFERENCES users (id)
-                )
-            """))
-            connection.execute(text("CREATE INDEX ix_join_requests_id ON join_requests (id)"))
-        if inspector.has_table("friend_requests") is False:
-            connection.execute(text("""
-                CREATE TABLE friend_requests (
-                    id INTEGER NOT NULL PRIMARY KEY,
-                    requester_id INTEGER NOT NULL,
-                    receiver_id INTEGER NOT NULL,
-                    status VARCHAR(16) NOT NULL DEFAULT 'pending',
-                    decided_at DATETIME,
-                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY(requester_id) REFERENCES users (id),
-                    FOREIGN KEY(receiver_id) REFERENCES users (id)
-                )
-            """))
-            connection.execute(text("CREATE INDEX ix_friend_requests_id ON friend_requests (id)"))
-        if inspector.has_table("friendships") is False:
-            connection.execute(text("""
-                CREATE TABLE friendships (
-                    id INTEGER NOT NULL PRIMARY KEY,
-                    user_id INTEGER NOT NULL,
-                    friend_id INTEGER NOT NULL,
-                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY(user_id) REFERENCES users (id),
-                    FOREIGN KEY(friend_id) REFERENCES users (id),
-                    UNIQUE(user_id, friend_id)
-                )
-            """))
-            connection.execute(text("CREATE INDEX ix_friendships_id ON friendships (id)"))
+        for table in (JoinRequest.__table__, FriendRequest.__table__, Friendship.__table__):
+            table.create(bind=connection, checkfirst=True)
         recommended = {
             "山茶茶馆": "适合闲聊、茶饮、生活记录的温柔小厅。",
             "午夜读书会": "每周共读一本书，慢慢讨论，欢迎认真潜水。",
