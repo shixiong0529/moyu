@@ -754,47 +754,84 @@ function ChannelInviteModal({ server, channel, onClose }) {
 
   return (
     <Modal
-      title={`邀请朋友加入 ${server?.name || '服务器'}`}
-      subtitle={`接收者将通过邀请链接加入服务器，然后进入 # ${channel?.name || '频道'}`}
+      title={`邀请加入 #${channel?.name || '频道'}`}
+      subtitle={server?.name}
       onClose={onClose}
       wide
-      footer={
-        <div style={{ width: '100%' }}>
-          <div style={{ color: 'var(--ink-0)', fontSize: 15, marginBottom: 10 }}>或者，向好友发送服务器邀请链接</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input className="form-input" value={link || '正在生成...'} readOnly onFocus={e => e.target.select()}/>
-            <button className="btn btn-primary" disabled={!link} onClick={copyLink}>
-              {sentTo === 'copied' ? '已复制' : '复制'}
-            </button>
-          </div>
-          <div className="form-hint">好友点击邀请链接后会加入服务器，并自动进入该频道。</div>
-        </div>
-      }
     >
-      <div className="search-box" style={{ height: 44, marginBottom: 18 }}>
-        <Icon name="search" size={16}/>
-        <input placeholder="搜索好友" value={query} onChange={e => setQuery(e.target.value)}/>
+      {/* Search box */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        background: 'var(--paper-2)', borderRadius: 6,
+        padding: '0 12px', marginBottom: 20,
+      }}>
+        <Icon name="search" size={14} style={{ color: 'var(--ink-2)', flexShrink: 0 }}/>
+        <input
+          style={{
+            flex: 1, border: 'none', background: 'transparent', outline: 'none',
+            color: 'var(--ink-0)', fontSize: 14, padding: '10px 0',
+            fontFamily: 'var(--ff-ui)',
+          }}
+          placeholder="搜索好友"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+        />
       </div>
 
-      {error && <div className="form-hint" style={{ color: 'var(--rust)', marginBottom: 10 }}>{error}</div>}
+      {error && <div style={{ color: 'var(--rust)', fontSize: 13, marginBottom: 10 }}>{error}</div>}
 
-      <div style={{ minHeight: 260 }}>
+      {/* Friend list */}
+      <div style={{ overflowY: 'auto', maxHeight: 260, marginBottom: 20 }}>
         {visibleFriends.length === 0 ? (
-          <div className="form-hint">暂无可显示的好友。</div>
+          <div style={{ color: 'var(--ink-2)', fontSize: 14, textAlign: 'center', padding: '32px 0' }}>暂无好友</div>
         ) : visibleFriends.map(friend => (
           <div key={friend.id} className="channel-invite-friend">
-            <div className={`avatar ${friend.avatar_color || 'av-1'}`}>
+            <div className={`avatar ${friend.avatar_color || 'av-1'}`} style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, position: 'relative' }}>
               <span className={`status-dot ${friend.status || 'offline'}`}/>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="friend-name">{friend.display_name}</div>
-              <div className="friend-sub">@{friend.username}</div>
+              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink-0)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{friend.display_name}</div>
+              <div style={{ fontSize: 12, color: 'var(--ink-2)' }}>@{friend.username}</div>
             </div>
-            <button className="btn btn-secondary" disabled={!link} onClick={() => inviteFriend(friend)}>
-              {sentTo === friend.id ? '已发送' : '邀请'}
+            <button
+              className={`btn ${sentTo === friend.id ? 'btn-secondary' : 'btn-primary'}`}
+              style={{ height: 30, padding: '0 16px', fontSize: 13, flexShrink: 0, minWidth: 58 }}
+              disabled={!link || sentTo === friend.id}
+              onClick={() => inviteFriend(friend)}
+            >
+              {sentTo === friend.id ? '已发送 ✓' : '邀请'}
             </button>
           </div>
         ))}
+      </div>
+
+      {/* Divider */}
+      <div style={{ height: 1, background: 'var(--paper-3)', margin: '0 -24px 18px' }}/>
+
+      {/* Invite link */}
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-2)', marginBottom: 8 }}>
+        或分享邀请链接
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{
+          flex: 1, background: 'var(--paper-2)', borderRadius: 6,
+          padding: '0 12px', display: 'flex', alignItems: 'center', height: 42, overflow: 'hidden',
+        }}>
+          <span style={{ color: 'var(--ink-1)', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--ff-mono)', letterSpacing: '-0.01em' }}>
+            {link || '正在生成邀请链接…'}
+          </span>
+        </div>
+        <button
+          className="btn btn-primary"
+          disabled={!link}
+          onClick={copyLink}
+          style={{ height: 42, padding: '0 18px', fontSize: 13, flexShrink: 0 }}
+        >
+          {sentTo === 'copied' ? '已复制 ✓' : '复制链接'}
+        </button>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 8 }}>
+        好友点击链接后加入服务器，并自动进入 #{channel?.name}。
       </div>
     </Modal>
   );
@@ -850,66 +887,84 @@ function ChannelEditModal({ server, channel, onClose, onUpdated, onDeleted }) {
   };
 
   return (
-    <Modal
-      title="编辑频道"
-      subtitle={`# ${channel?.name || 'channel'} · ${kindLabel}`}
-      onClose={onClose}
-      wide
-      footer={
-        <>
-          <button className="btn btn-ghost" onClick={onClose}>取消</button>
-          <button className="btn btn-primary" disabled={!name.trim() || loading} onClick={save}>
-            {loading ? '保存中...' : '确认修改'}
-          </button>
-        </>
-      }
-    >
+    <Modal title="编辑频道" onClose={onClose} wide>
       <div className="channel-edit-window">
-        <aside className="channel-edit-menu">
-          <div className="channel-edit-menu-title"># {channel?.name || 'channel'} {kindLabel}</div>
-          <button className="active" type="button">概况</button>
-          <button className="danger" type="button" onClick={() => setDeleteOpen(true)}>
-            <span>删除频道</span>
-            <Icon name="trash" size={15}/>
+
+        {/* ── Left nav ── */}
+        <aside className="channel-edit-sidebar">
+          <div className="channel-edit-sidebar-header">
+            <Icon name="hash" size={13}/> {channel?.name || 'channel'}
+          </div>
+          <button className="channel-edit-nav-item active" type="button">
+            <Icon name="settings" size={14}/>
+            概况
+          </button>
+          <div className="channel-edit-nav-divider"/>
+          <button className="channel-edit-nav-item danger" type="button" onClick={() => setDeleteOpen(true)}>
+            <Icon name="trash" size={14}/>
+            删除频道
           </button>
         </aside>
+
+        {/* ── Right panel ── */}
         <section className="channel-edit-panel">
-          <h3>概况</h3>
-          <div className="settings-section">
-            <label className="form-label">频道名称</label>
+          <div className="channel-edit-panel-title">
+            频道概况
+            <span className="channel-edit-kind-badge">{kindLabel}</span>
+          </div>
+
+          <label className="form-label">频道名称</label>
+          <div className="channel-edit-name-input">
+            <span className="channel-edit-name-prefix">#</span>
             <input
-              className="form-input"
+              style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', color: 'var(--ink-0)', fontSize: 14, fontFamily: 'var(--ff-ui)', padding: 0 }}
               value={name}
               maxLength={64}
               onChange={e => setName(e.target.value)}
               autoFocus
+              placeholder="频道名称"
             />
           </div>
-          <div className="settings-section">
-            <label className="form-label">频道主题</label>
-            <textarea
-              className="form-input channel-topic-editor"
-              value={topic}
-              maxLength={256}
-              onChange={e => setTopic(e.target.value)}
-              placeholder="添加这个频道的主题"
-            />
-            <div className="form-hint" style={{ textAlign: 'right' }}>{remaining}</div>
+
+          <label className="form-label" style={{ marginTop: 20 }}>频道话题 <span style={{ fontWeight: 400, color: 'var(--ink-2)' }}>（选填）</span></label>
+          <textarea
+            className="form-input channel-topic-editor"
+            value={topic}
+            maxLength={256}
+            onChange={e => setTopic(e.target.value)}
+            placeholder="介绍一下这个频道的用途，让成员一眼就能明白。"
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', color: remaining < 30 ? 'var(--rust)' : 'var(--ink-2)', fontSize: 11, marginTop: 4 }}>
+            {remaining} / 256
           </div>
-          {error && <div className="form-hint" style={{ color: 'var(--rust)' }}>{error}</div>}
+
+          {error && <div style={{ color: 'var(--rust)', fontSize: 13, marginTop: 10 }}>{error}</div>}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 24 }}>
+            <button className="btn btn-ghost" onClick={onClose}>取消</button>
+            <button className="btn btn-primary" disabled={!name.trim() || loading} onClick={save}>
+              {loading ? '保存中…' : '保存更改'}
+            </button>
+          </div>
         </section>
       </div>
 
+      {/* ── Delete confirmation overlay ── */}
       {deleteOpen && (
         <div className="channel-delete-confirm-backdrop" onClick={() => setDeleteOpen(false)}>
           <div className="channel-delete-confirm" onClick={e => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setDeleteOpen(false)}><Icon name="close" size={18}/></button>
-            <h2>删除频道</h2>
-            <p>您确认删除 #{channel?.name || '频道'} 吗？这个操作是不能撤销的哦！</p>
+            <button className="modal-close" onClick={() => setDeleteOpen(false)}>
+              <Icon name="close" size={16}/>
+            </button>
+            <div className="channel-delete-icon">
+              <Icon name="trash" size={28}/>
+            </div>
+            <h2>删除 #{channel?.name}</h2>
+            <p>你确定要删除 <strong>#{channel?.name}</strong> 吗？频道内所有消息将永久丢失，此操作无法撤销。</p>
             <div className="channel-delete-confirm-actions">
-              <button className="btn btn-secondary" onClick={() => setDeleteOpen(false)}>取消</button>
-              <button className="btn btn-primary danger" disabled={deleteLoading} onClick={deleteChannel}>
-                {deleteLoading ? '删除中...' : '删除频道'}
+              <button className="btn btn-ghost" style={{ height: 42 }} onClick={() => setDeleteOpen(false)}>取消</button>
+              <button className="btn btn-primary" style={{ height: 42, background: 'var(--rust)', borderColor: 'var(--rust)' }} disabled={deleteLoading} onClick={deleteChannel}>
+                {deleteLoading ? '删除中…' : '确认删除'}
               </button>
             </div>
           </div>

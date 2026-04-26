@@ -169,8 +169,8 @@ function App() {
   const init = (k, d) => {
     try { const v = localStorage.getItem('hearth-' + k); return v ? JSON.parse(v) : d; } catch { return d; }
   };
-  const [theme, setTheme] = useStateApp(init('theme', 'light'));
-  const [accent, setAccent] = useStateApp(init('accent', 'wood'));
+  const [theme, setTheme] = useStateApp(init('theme', 'dark'));
+  const [accent, setAccent] = useStateApp(init('accent', 'teal'));
   const [density, setDensity] = useStateApp(init('density', 'default'));
   const [activeServerId, setActiveServerId] = useStateApp(init('server', 'bookclub'));
   const [activeChannelId, setActiveChannelId] = useStateApp(init('channel', 'the-drifting'));
