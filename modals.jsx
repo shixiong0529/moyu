@@ -687,6 +687,238 @@ function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
   );
 }
 
+function ChannelInviteModal({ server, channel, onClose }) {
+  const [invite, setInvite] = useStateM(null);
+  const [friends, setFriends] = useStateM([]);
+  const [query, setQuery] = useStateM('');
+  const [sentTo, setSentTo] = useStateM(null);
+  const [error, setError] = useStateM('');
+  const baseLink = invite?.web_url || API.inviteWebUrl(invite?.code);
+  const link = baseLink && channel?.id
+    ? `${baseLink}${baseLink.includes('?') ? '&' : '?'}channel=${encodeURIComponent(channel.id)}`
+    : baseLink;
+
+  useEffectM(function loadChannelInviteData() {
+    let cancelled = false;
+
+    async function loadData() {
+      try {
+        const [inviteResult, friendItems] = await Promise.all([
+          API.post(`/api/servers/${server.id}/invite`, {}),
+          API.get('/api/friends'),
+        ]);
+        if (cancelled) return;
+        setInvite(inviteResult);
+        setFriends(friendItems);
+      } catch (err) {
+        if (!cancelled) setError(err.message || '生成邀请失败');
+      }
+    }
+
+    if (server?.id) loadData();
+    return function cancelLoadChannelInviteData() {
+      cancelled = true;
+    };
+  }, [server?.id]);
+
+  const copyLink = async () => {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setSentTo('copied');
+      window.setTimeout(() => setSentTo(null), 1400);
+    } catch {
+      setError('复制失败，请手动复制链接');
+    }
+  };
+
+  const inviteFriend = async (friend) => {
+    if (!link || !friend?.id) return;
+    setError('');
+    try {
+      await API.post(`/api/dm/${friend.id}/messages`, {
+        content: `邀请你加入 ${server.name} 的 #${channel.name} 频道：${link}`,
+      });
+      setSentTo(friend.id);
+      window.setTimeout(() => setSentTo(null), 1600);
+    } catch (err) {
+      setError(err.message || '发送邀请失败');
+    }
+  };
+
+  const visibleFriends = friends.filter(friend => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return true;
+    return `${friend.display_name} ${friend.username}`.toLowerCase().includes(needle);
+  });
+
+  return (
+    <Modal
+      title={`邀请朋友加入 ${server?.name || '服务器'}`}
+      subtitle={`接收者将通过邀请链接加入服务器，然后进入 # ${channel?.name || '频道'}`}
+      onClose={onClose}
+      wide
+      footer={
+        <div style={{ width: '100%' }}>
+          <div style={{ color: 'var(--ink-0)', fontSize: 15, marginBottom: 10 }}>或者，向好友发送服务器邀请链接</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input className="form-input" value={link || '正在生成...'} readOnly onFocus={e => e.target.select()}/>
+            <button className="btn btn-primary" disabled={!link} onClick={copyLink}>
+              {sentTo === 'copied' ? '已复制' : '复制'}
+            </button>
+          </div>
+          <div className="form-hint">好友点击邀请链接后会加入服务器，并自动进入该频道。</div>
+        </div>
+      }
+    >
+      <div className="search-box" style={{ height: 44, marginBottom: 18 }}>
+        <Icon name="search" size={16}/>
+        <input placeholder="搜索好友" value={query} onChange={e => setQuery(e.target.value)}/>
+      </div>
+
+      {error && <div className="form-hint" style={{ color: 'var(--rust)', marginBottom: 10 }}>{error}</div>}
+
+      <div style={{ minHeight: 260 }}>
+        {visibleFriends.length === 0 ? (
+          <div className="form-hint">暂无可显示的好友。</div>
+        ) : visibleFriends.map(friend => (
+          <div key={friend.id} className="channel-invite-friend">
+            <div className={`avatar ${friend.avatar_color || 'av-1'}`}>
+              <span className={`status-dot ${friend.status || 'offline'}`}/>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="friend-name">{friend.display_name}</div>
+              <div className="friend-sub">@{friend.username}</div>
+            </div>
+            <button className="btn btn-secondary" disabled={!link} onClick={() => inviteFriend(friend)}>
+              {sentTo === friend.id ? '已发送' : '邀请'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+function ChannelEditModal({ server, channel, onClose, onUpdated, onDeleted }) {
+  const [name, setName] = useStateM(channel?.name || '');
+  const [topic, setTopic] = useStateM(channel?.topic || '');
+  const [deleteOpen, setDeleteOpen] = useStateM(false);
+  const [error, setError] = useStateM('');
+  const [loading, setLoading] = useStateM(false);
+  const [deleteLoading, setDeleteLoading] = useStateM(false);
+  const remaining = 256 - topic.length;
+  const kindLabel = channel?.kind === 'voice' ? '语音频道' : channel?.kind === 'announce' ? '公告频道' : '文字频道';
+
+  useEffectM(function syncChannelEditState() {
+    setName(channel?.name || '');
+    setTopic(channel?.topic || '');
+    setDeleteOpen(false);
+    setError('');
+  }, [channel?.id]);
+
+  const save = async () => {
+    const cleanName = name.trim().replace(/^#/, '');
+    if (!cleanName || loading || !channel?.id) return;
+    setLoading(true);
+    setError('');
+    try {
+      const updated = await API.patch(`/api/channels/${channel.id}`, {
+        name: cleanName,
+        topic: topic.trim() || null,
+      });
+      await onUpdated?.(updated);
+    } catch (err) {
+      setError(err.message || '保存频道失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteChannel = async () => {
+    if (!channel?.id || deleteLoading) return;
+    setDeleteLoading(true);
+    setError('');
+    try {
+      const result = await API.del(`/api/channels/${channel.id}`);
+      await onDeleted?.(result);
+    } catch (err) {
+      setError(err.message || '删除频道失败');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="编辑频道"
+      subtitle={`# ${channel?.name || 'channel'} · ${kindLabel}`}
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>取消</button>
+          <button className="btn btn-primary" disabled={!name.trim() || loading} onClick={save}>
+            {loading ? '保存中...' : '确认修改'}
+          </button>
+        </>
+      }
+    >
+      <div className="channel-edit-window">
+        <aside className="channel-edit-menu">
+          <div className="channel-edit-menu-title"># {channel?.name || 'channel'} {kindLabel}</div>
+          <button className="active" type="button">概况</button>
+          <button className="danger" type="button" onClick={() => setDeleteOpen(true)}>
+            <span>删除频道</span>
+            <Icon name="trash" size={15}/>
+          </button>
+        </aside>
+        <section className="channel-edit-panel">
+          <h3>概况</h3>
+          <div className="settings-section">
+            <label className="form-label">频道名称</label>
+            <input
+              className="form-input"
+              value={name}
+              maxLength={64}
+              onChange={e => setName(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div className="settings-section">
+            <label className="form-label">频道主题</label>
+            <textarea
+              className="form-input channel-topic-editor"
+              value={topic}
+              maxLength={256}
+              onChange={e => setTopic(e.target.value)}
+              placeholder="添加这个频道的主题"
+            />
+            <div className="form-hint" style={{ textAlign: 'right' }}>{remaining}</div>
+          </div>
+          {error && <div className="form-hint" style={{ color: 'var(--rust)' }}>{error}</div>}
+        </section>
+      </div>
+
+      {deleteOpen && (
+        <div className="channel-delete-confirm-backdrop" onClick={() => setDeleteOpen(false)}>
+          <div className="channel-delete-confirm" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setDeleteOpen(false)}><Icon name="close" size={18}/></button>
+            <h2>删除频道</h2>
+            <p>您确认删除 #{channel?.name || '频道'} 吗？这个操作是不能撤销的哦！</p>
+            <div className="channel-delete-confirm-actions">
+              <button className="btn btn-secondary" onClick={() => setDeleteOpen(false)}>取消</button>
+              <button className="btn btn-primary danger" disabled={deleteLoading} onClick={deleteChannel}>
+                {deleteLoading ? '删除中...' : '删除频道'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function InviteModal({ server, onClose }) {
   const [invite, setInvite] = useStateM(null);
   const [copied, setCopied] = useStateM(false);
@@ -1334,6 +1566,8 @@ Object.assign(window, {
   CreateChannelModal,
   CreateGroupModal,
   ServerSettingsModal,
+  ChannelInviteModal,
+  ChannelEditModal,
   InviteModal,
   JoinRequestsModal,
   FriendRequestsModal,

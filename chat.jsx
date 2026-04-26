@@ -29,6 +29,11 @@ function getImageLinks(content) {
   return matches || [];
 }
 
+function getInviteLink(content) {
+  const match = String(content || '').match(/https?:\/\/\S*(?:invite=|\/invite\/)\S*|hearth:\/\/invite\/\S+|invite:[^\s]+/i);
+  return match ? match[0].replace(/[，。！？、,.!?]+$/, '') : '';
+}
+
 function ChatHeader({ channel, onToggleMembers, searchValue, setSearchValue, pinsOpen, onTogglePins }) {
   if (!channel) return null;
   return (
@@ -70,7 +75,7 @@ function ContextMenu({ x, y, canEdit, canDelete, canPin, onReact, onEdit, onDele
   );
 }
 
-function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, onOpenThread, currentUser, currentRole }) {
+function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, onOpenThread, currentUser, currentRole, inviteDecision, onAcceptInvite, onRejectInvite }) {
   const [editing, setEditing] = useStateChat(false);
   const [editValue, setEditValue] = useStateChat(msg.content || msg.lines?.join('\n') || '');
   const [menu, setMenu] = useStateChat(null);
@@ -80,6 +85,7 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
   const content = msg.content || msg.lines?.join('\n') || '';
   const html = useMemoChat(() => renderMessageHtml(content), [content]);
   const imageLinks = useMemoChat(() => getImageLinks(content), [content]);
+  const inviteLink = useMemoChat(() => getInviteLink(content), [content]);
 
   useEffectChat(function syncEditValue() {
     setEditValue(msg.content || msg.lines?.join('\n') || '');
@@ -150,6 +156,26 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
                     <img src={link} alt="图片预览" />
                   </a>
                 ))}
+              </div>
+            )}
+            {inviteLink && (onAcceptInvite || onRejectInvite) && (
+              <div className="dm-invite-card">
+                <div>
+                  <div className="dm-invite-title">频道邀请</div>
+                  <div className="dm-invite-sub">接受后会加入服务器并进入对应频道。</div>
+                </div>
+                <div className="dm-invite-actions">
+                  {inviteDecision === 'accepted' ? (
+                    <span className="dm-invite-status">已接受</span>
+                  ) : inviteDecision === 'rejected' ? (
+                    <span className="dm-invite-status">已拒绝</span>
+                  ) : (
+                    <>
+                      <button className="btn btn-secondary" onClick={() => onRejectInvite?.(msg)}>拒绝</button>
+                      <button className="btn btn-primary" onClick={() => onAcceptInvite?.(msg)}>接受邀请</button>
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </>

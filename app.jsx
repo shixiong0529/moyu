@@ -94,8 +94,25 @@ function apiDMMessageToView(message, currentUserDisplay) {
     color: isMine ? currentUserDisplay.color : sender.avatar_color || 'av-1',
     authorId: sender.id,
     time: formatMessageTime(message.created_at),
+    content: message.content || '',
     lines: String(message.content || '').split('\n'),
   };
+}
+
+function parseInviteFromContent(content) {
+  const text = String(content || '');
+  const match = text.match(/https?:\/\/\S+|hearth:\/\/invite\/\S+|invite:[^\s]+/i);
+  if (!match) return null;
+  const raw = match[0].replace(/[，。！？、,.!?]+$/, '');
+  const code = API.parseInviteCode(raw);
+  if (!code) return null;
+  let channelId = null;
+  try {
+    const url = new URL(raw);
+    const channelParam = Number(url.searchParams.get('channel') || '');
+    channelId = channelParam || null;
+  } catch {}
+  return { code, channelId, url: raw };
 }
 
 function mergeServerMessages(existing, serverMessages) {
@@ -170,6 +187,8 @@ function App() {
   const [createChannelGroup, setCreateChannelGroup] = useStateApp(null);
   const [createGroupOpen, setCreateGroupOpen] = useStateApp(false);
   const [serverSettingsOpen, setServerSettingsOpen] = useStateApp(null);
+  const [channelInviteOpen, setChannelInviteOpen] = useStateApp(null);
+  const [channelEditOpen, setChannelEditOpen] = useStateApp(null);
   const [inviteServer, setInviteServer] = useStateApp(null);
   const [joinRequestsServer, setJoinRequestsServer] = useStateApp(null);
   const [friendRequestsOpen, setFriendRequestsOpen] = useStateApp(false);
@@ -183,6 +202,7 @@ function App() {
   const [search, setSearch] = useStateApp('');
   const [tweaksOn, setTweaksOn] = useStateApp(false);
   const [messagesByChannel, setMessagesByChannel] = useStateApp({});
+  const [inviteDecisions, setInviteDecisions] = useStateApp(init('invite-decisions', {}));
   const [sendError, setSendError] = useStateApp('');
   const [typingUsers, setTypingUsers] = useStateApp({});
   const [serverMembers, setServerMembers] = useStateApp([]);
@@ -258,11 +278,13 @@ function App() {
     if (authStatus !== 'authenticated' || inviteHandledRef.current) return;
     const params = new URLSearchParams(window.location.search);
     const code = API.parseInviteCode(params.get('invite'));
+    const inviteChannelId = Number(params.get('channel') || '');
     if (!code) return;
     inviteHandledRef.current = true;
     API.post('/api/servers/join', { code })
       .then(async server => {
         await enterServer(server);
+        if (inviteChannelId) setActiveChannelId(inviteChannelId);
         window.history.replaceState({}, document.title, window.location.pathname);
       })
       .catch(() => {});
@@ -334,11 +356,14 @@ function App() {
   useEffectApp(() => { localStorage.setItem('hearth-server', JSON.stringify(activeServerId)); }, [activeServerId]);
   useEffectApp(() => { localStorage.setItem('hearth-channel', JSON.stringify(activeChannelId)); }, [activeChannelId]);
   useEffectApp(() => { localStorage.setItem('hearth-dm', JSON.stringify(activeDMId)); }, [activeDMId]);
+  useEffectApp(() => { localStorage.setItem('hearth-invite-decisions', JSON.stringify(inviteDecisions)); }, [inviteDecisions]);
 
   useEffectApp(() => {
     const h = (e) => {
       if (e.key !== 'Escape') return;
       if (settingsOpen) setSettingsOpen(false);
+      else if (channelEditOpen) setChannelEditOpen(null);
+      else if (channelInviteOpen) setChannelInviteOpen(null);
       else if (serverSettingsOpen) setServerSettingsOpen(null);
       else if (createGroupOpen) setCreateGroupOpen(false);
       else if (createOpen) setCreateOpen(false);
@@ -346,7 +371,7 @@ function App() {
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [settingsOpen, serverSettingsOpen, createGroupOpen, createOpen, profileCard]);
+  }, [settingsOpen, channelEditOpen, channelInviteOpen, serverSettingsOpen, createGroupOpen, createOpen, profileCard]);
 
   useEffectApp(() => {
     const handler = (e) => {
@@ -785,6 +810,44 @@ function App() {
     await refreshActiveServerDetail();
   };
 
+  const handleChannelUpdated = async (channel) => {
+    await refreshActiveServerDetail(channel.server_id || activeServerId);
+    setActiveChannelId(channel.id);
+    setChannelEditOpen(null);
+  };
+
+  const handleChannelDeleted = async (deleted) => {
+    const serverId = deleted?.server_id || activeServerId;
+    const detail = await refreshActiveServerDetail(serverId);
+    const nextChannel = detail?.channel_groups?.flatMap(group => group.items)
+      .find(channel => channel.kind === 'text' || channel.kind === 'announce');
+    setActiveChannelId(nextChannel?.id || null);
+    setChannelEditOpen(null);
+  };
+
+  const markInviteDecision = (messageId, decision) => {
+    setInviteDecisions(prev => ({ ...prev, [messageId]: decision }));
+  };
+
+  const handleAcceptInvite = async (message) => {
+    const invite = parseInviteFromContent(message?.content || message?.lines?.join('\n'));
+    if (!invite?.code) return;
+    setSendError('');
+    try {
+      const server = await API.post('/api/servers/join', { code: invite.code });
+      markInviteDecision(message.id, 'accepted');
+      await enterServer(server);
+      if (invite.channelId) setActiveChannelId(invite.channelId);
+    } catch (err) {
+      setSendError(err.message || '接受邀请失败');
+    }
+  };
+
+  const handleRejectInvite = (message) => {
+    if (!message?.id) return;
+    markInviteDecision(message.id, 'rejected');
+  };
+
   const handleServerUpdated = async (server) => {
     await refreshServers();
     if (server?.id === activeServerId) {
@@ -893,6 +956,8 @@ function App() {
               onServerSettings={() => setServerSettingsOpen(activeServer)}
               onLeaveServer={() => handleLeaveServer(activeServer)}
               onDeleteServer={() => setServerSettingsOpen({ ...activeServer, _dangerOpen: true })}
+              onInviteChannel={(channel) => setChannelInviteOpen(channel)}
+              onEditChannel={(channel) => setChannelEditOpen(channel)}
             />
           )}
         </div>
@@ -936,6 +1001,10 @@ function App() {
             messages={dmMessages}
             onSend={handleSend}
             onOpenProfile={handleOpenProfile}
+            currentUser={currentUserDisplay}
+            inviteDecisions={inviteDecisions}
+            onAcceptInvite={handleAcceptInvite}
+            onRejectInvite={handleRejectInvite}
             sendError={sendError}
           />
         )
@@ -989,6 +1058,24 @@ function App() {
           onClose={() => setServerSettingsOpen(null)}
           onUpdated={handleServerUpdated}
           onDeleted={handleServerDeleted}
+        />
+      )}
+
+      {channelInviteOpen && (
+        <ChannelInviteModal
+          server={activeServer}
+          channel={channelInviteOpen}
+          onClose={() => setChannelInviteOpen(null)}
+        />
+      )}
+
+      {channelEditOpen && (
+        <ChannelEditModal
+          server={activeServer}
+          channel={channelEditOpen}
+          onClose={() => setChannelEditOpen(null)}
+          onUpdated={handleChannelUpdated}
+          onDeleted={handleChannelDeleted}
         />
       )}
 
@@ -1116,6 +1203,8 @@ function InlineChannelSidebar({
   onServerSettings,
   onLeaveServer,
   onDeleteServer,
+  onInviteChannel,
+  onEditChannel,
 }) {
   const [menuOpen, setMenuOpen] = React.useState(false);
   const groups = channelGroups || CHANNELS[server.id] || [];
@@ -1186,7 +1275,14 @@ function InlineChannelSidebar({
               <span className="plus" title="创建频道" onClick={(e) => { e.stopPropagation(); onCreateChannel?.(g); }}><Icon name="plus" size={14}/></span>
             </div>
             {g.items.map(ch => (
-              <ChannelRowInline key={ch.id} ch={ch} active={activeChannel?.id === ch.id} onClick={() => onSelectChannel(ch)}/>
+              <ChannelRowInline
+                key={ch.id}
+                ch={ch}
+                active={activeChannel?.id === ch.id}
+                onClick={() => onSelectChannel(ch)}
+                onInvite={() => onInviteChannel?.(ch)}
+                onEdit={() => onEditChannel?.(ch)}
+              />
             ))}
           </React.Fragment>
         ))}
@@ -1243,13 +1339,38 @@ function MenuDivider() {
   return <div style={{ height: 1, background: 'var(--paper-3)', margin: '4px 0' }} />;
 }
 
-function ChannelRowInline({ ch, active, onClick }) {
+function ChannelActionButtons({ onInvite, onEdit }) {
+  return (
+    <span className="channel-actions-inline">
+      <button
+        type="button"
+        title="邀请到频道"
+        aria-label="邀请到频道"
+        onClick={(e) => { e.stopPropagation(); onInvite?.(); }}
+      >
+        <Icon name="users" size={17} stroke={2.2}/>
+        <Icon name="plus" size={10} stroke={2.4}/>
+      </button>
+      <button
+        type="button"
+        title="编辑频道"
+        aria-label="编辑频道"
+        onClick={(e) => { e.stopPropagation(); onEdit?.(); }}
+      >
+        <Icon name="settings" size={18} stroke={2.1}/>
+      </button>
+    </span>
+  );
+}
+
+function ChannelRowInline({ ch, active, onClick, onInvite, onEdit }) {
   if (ch.kind === 'voice') {
     return (
       <>
         <div className={`channel-item ${active ? 'active' : ''}`} onClick={onClick}>
           <span className="glyph"><ChannelGlyph kind={ch.kind}/></span>
           <span className="name">{ch.name}</span>
+          <ChannelActionButtons onInvite={onInvite} onEdit={onEdit}/>
         </div>
         {ch.members && ch.members.length > 0 && (
           <div style={{ paddingLeft: 30, marginBottom: 4 }}>
@@ -1271,6 +1392,7 @@ function ChannelRowInline({ ch, active, onClick }) {
       <span className="name">{ch.name}</span>
       {ch.mentions > 0 && <span className="badge">{ch.mentions}</span>}
       {ch.unread && !ch.mentions && !active && <span className="unread-dot"/>}
+      <ChannelActionButtons onInvite={onInvite} onEdit={onEdit}/>
     </div>
   );
 }

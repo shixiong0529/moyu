@@ -56,7 +56,7 @@ function TweaksPanel({ active, theme, setTheme, accent, setAccent, density, setD
 }
 
 /* DM chat view — reuses chat components but with a header showing the friend */
-function DMView({ dm, messages, onSend, onOpenProfile, sendError }) {
+function DMView({ dm, messages, onSend, onOpenProfile, currentUser, inviteDecisions = {}, onAcceptInvite, onRejectInvite, sendError }) {
   if (!dm) {
     return (
       <div className="chat">
@@ -100,7 +100,15 @@ function DMView({ dm, messages, onSend, onOpenProfile, sendError }) {
         </div>
         <div className="day-divider"><span>星期三 · MAY 14</span></div>
         {messages.map(m => (
-          <MessageGroup key={m.id} msg={m} onOpenProfile={onOpenProfile} onReact={() => {}}/>
+          <MessageGroup
+            key={m.id}
+            msg={m}
+            onOpenProfile={onOpenProfile}
+            onReact={() => {}}
+            inviteDecision={inviteDecisions[m.id]}
+            onAcceptInvite={m.authorId === currentUser?.id ? null : onAcceptInvite}
+            onRejectInvite={m.authorId === currentUser?.id ? null : onRejectInvite}
+          />
         ))}
       </div>
       <Composer channelName={dm.name} onSend={onSend} error={sendError}/>

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 from auth import get_current_user
 from database import get_db
 from models import Channel, ChannelGroup, Message, PinnedMessage, Reaction, ServerMember, User
-from schemas import MessageCreateRequest, MessageUpdateRequest, ReactionRequest
+from schemas import ChannelUpdateRequest, MessageCreateRequest, MessageUpdateRequest, ReactionRequest
 from routers.websocket import manager
 from telegram_service import notify as tg_notify
 
@@ -56,6 +56,18 @@ def require_mod(db: Session, server_id: int, user_id: int) -> ServerMember:
     if member is None or member.role not in {"founder", "mod"}:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="insufficient permissions")
     return member
+
+
+def channel_to_dict(channel: Channel) -> dict:
+    return {
+        "id": channel.id,
+        "server_id": channel.server_id,
+        "group_id": channel.group_id,
+        "name": channel.name,
+        "kind": channel.kind,
+        "topic": channel.topic,
+        "position": channel.position,
+    }
 
 
 def message_to_dict(message: Message, current_user_id: int) -> dict:
@@ -185,6 +197,46 @@ def list_messages(
     has_more = len(rows) > limit
     messages = list(reversed(rows[:limit]))
     return {"messages": [message_to_dict(message, current_user.id) for message in messages], "has_more": has_more}
+
+
+@router.patch("/api/channels/{channel_id}")
+def update_channel(
+    channel_id: int,
+    payload: ChannelUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    channel = require_channel_member(db, channel_id, current_user.id)
+    require_mod(db, channel.server_id, current_user.id)
+    updates = payload.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        if isinstance(value, str):
+            value = value.strip()
+        setattr(channel, field, value or None if field == "topic" else value)
+    db.add(channel)
+    db.commit()
+    db.refresh(channel)
+    return channel_to_dict(channel)
+
+
+@router.delete("/api/channels/{channel_id}")
+def delete_channel(
+    channel_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    channel = require_channel_member(db, channel_id, current_user.id)
+    require_mod(db, channel.server_id, current_user.id)
+    server_id = channel.server_id
+    message_ids = db.scalars(select(Message.id).where(Message.channel_id == channel_id)).all()
+    if message_ids:
+        db.execute(delete(Reaction).where(Reaction.message_id.in_(message_ids)))
+        db.execute(delete(PinnedMessage).where(PinnedMessage.message_id.in_(message_ids)))
+        db.execute(delete(Message).where(Message.id.in_(message_ids)))
+    db.execute(delete(PinnedMessage).where(PinnedMessage.channel_id == channel_id))
+    db.delete(channel)
+    db.commit()
+    return {"ok": True, "server_id": server_id, "channel_id": channel_id}
 
 
 @router.post("/api/channels/{channel_id}/messages", status_code=status.HTTP_201_CREATED)

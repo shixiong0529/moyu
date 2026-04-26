@@ -395,6 +395,41 @@ body {
 }
 .channel-item.active .glyph { color: var(--accent); }
 .channel-item .name { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.channel-actions-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity 0.12s ease;
+}
+.channel-item:hover .channel-actions-inline,
+.channel-item.active .channel-actions-inline {
+  opacity: 1;
+}
+.channel-actions-inline button {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.channel-actions-inline button:hover {
+  background: var(--paper-3);
+  color: var(--ink-0);
+}
+.channel-actions-inline button svg + svg {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  stroke-width: 2;
+}
 .channel-item .unread-dot {
   width: 6px; height: 6px; border-radius: 50%;
   background: var(--accent);
@@ -508,6 +543,169 @@ body {
   background: var(--paper-2);
   color: var(--ink-2);
   font-size: 12px;
+}
+
+.channel-invite-friend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 6px 0;
+}
+.channel-invite-friend .avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  position: relative;
+  flex-shrink: 0;
+}
+.channel-topic-editor {
+  height: 220px;
+  padding: 14px;
+  line-height: 1.55;
+  resize: vertical;
+}
+.channel-edit-root .settings-main {
+  max-width: 980px;
+}
+.settings-sidebar a.danger-link {
+  color: var(--rust);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.channel-danger-zone {
+  border: 1px solid rgba(181, 88, 58, 0.28);
+  background: rgba(181, 88, 58, 0.06);
+  border-radius: 8px;
+  padding: 16px;
+}
+.channel-edit-window {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 20px;
+  min-height: 360px;
+}
+.channel-edit-menu {
+  border-right: 1px solid var(--paper-3);
+  padding-right: 14px;
+}
+.channel-edit-menu-title {
+  margin-bottom: 12px;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 800;
+}
+.channel-edit-menu button {
+  width: 100%;
+  height: 38px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  cursor: pointer;
+  font-size: 15px;
+}
+.channel-edit-menu button.active {
+  background: var(--paper-2);
+  color: var(--ink-0);
+}
+.channel-edit-menu button.danger {
+  margin-top: 10px;
+  color: var(--rust);
+}
+.channel-edit-menu button:hover {
+  background: var(--paper-2);
+}
+.channel-edit-panel h3 {
+  margin: 0 0 16px;
+  font-size: 22px;
+  color: var(--ink-0);
+}
+.channel-delete-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 430;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(24, 24, 28, 0.45);
+}
+.channel-delete-confirm {
+  position: relative;
+  width: min(560px, calc(100vw - 32px));
+  border-radius: 12px;
+  background: var(--paper-0);
+  box-shadow: 0 22px 70px rgba(24, 24, 28, 0.28);
+  padding: 34px 36px 28px;
+}
+.channel-delete-confirm h2 {
+  margin: 0 0 10px;
+  color: var(--ink-0);
+  font-size: 26px;
+}
+.channel-delete-confirm p {
+  margin: 0 0 34px;
+  color: var(--ink-1);
+  font-size: 18px;
+  line-height: 1.35;
+}
+.channel-delete-confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.channel-delete-confirm-actions .btn {
+  height: 58px;
+  justify-content: center;
+  font-size: 18px;
+}
+.btn-primary.danger {
+  background: #d62f43;
+}
+.btn-primary.danger:hover {
+  background: #bd2436;
+}
+.dm-invite-card {
+  max-width: 430px;
+  margin-top: 10px;
+  border: 1px solid var(--paper-3);
+  border-radius: 8px;
+  background: var(--paper-1);
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.dm-invite-title {
+  font-weight: 800;
+  color: var(--ink-0);
+}
+.dm-invite-sub {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.dm-invite-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.dm-invite-actions .btn {
+  height: 32px;
+  padding: 0 12px;
+}
+.dm-invite-status {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+  font-weight: 700;
 }
 .friend-menu-wrap {
   position: relative;

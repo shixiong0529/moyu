@@ -76,6 +76,11 @@ class ChannelCreateRequest(BaseModel):
     topic: str | None = Field(default=None, max_length=256)
 
 
+class ChannelUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    topic: str | None = Field(default=None, max_length=256)
+
+
 class InviteCreateRequest(BaseModel):
     max_uses: int | None = Field(default=None, ge=1, le=1000)
     expires_hours: int | None = Field(default=None, ge=1, le=720)
