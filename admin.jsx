@@ -101,7 +101,7 @@ function Flash({ msg }) {
 }
 function Table({ cols, rows, onRowClick }) {
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 16 }}>
+    <table style={{ width: 'auto', borderCollapse: 'collapse', fontSize: 16 }}>
       <thead>
         <tr>{cols.map(c => (
           <th key={c.key} style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid var(--paper-2)', color: 'var(--ink-2)', fontWeight: 600 }}>{c.label}</th>
