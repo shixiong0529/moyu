@@ -4,8 +4,6 @@
 
 ![Biscord Login](docs/demo-login.png)
 
-![Biscord Demo](docs/demo.png)
-
 ---
 
 ## 目录
