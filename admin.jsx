@@ -566,7 +566,7 @@ function AdminShell({ adminUser }) {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--paper-0)', color: 'var(--ink-0)' }}>
+    <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden', background: 'var(--paper-0)', color: 'var(--ink-0)' }}>
       <AdminSidebar page={nav.page} onNav={goTo} onLogout={logout} adminUser={adminUser} />
       <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>{renderPage()}</main>
     </div>
@@ -596,7 +596,7 @@ function AdminApp() {
   }
 
   return (
-    <div className="app theme-forest density-default" style={{ height: '100vh', overflow: 'hidden', fontSize: 17 }}>
+    <div className="app theme-forest density-default" style={{ width: '100vw', height: '100vh', overflow: 'hidden', fontSize: 17 }}>
       {adminUser ? <AdminShell adminUser={adminUser} /> : <AdminLogin onLogin={setAdminUser} />}
     </div>
   );
