@@ -19,7 +19,18 @@ import telegram_service
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Per-user bot token model: no server-side webhook or polling needed.
+    admin_username = os.getenv("ADMIN_USERNAME", "")
+    if admin_username:
+        from sqlalchemy.orm import Session as _Session
+        with _Session(engine) as _db:
+            from sqlalchemy import select as _select
+            _user = _db.scalar(_select(User).where(User.username == admin_username))
+            if _user is None:
+                import logging
+                logging.warning(f"ADMIN_USERNAME '{admin_username}' not found in database")
+            elif not _user.is_admin:
+                _user.is_admin = True
+                _db.commit()
     yield
 
 

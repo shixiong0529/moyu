@@ -75,6 +75,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.username == payload.username))
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid username or password")
+    if user.is_banned:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=user.banned_reason or "account banned")
 
     user.status = "online"
     db.commit()

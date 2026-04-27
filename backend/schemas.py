@@ -14,6 +14,7 @@ class UserSchema(BaseModel):
     status: str
     bio: str | None = None
     created_at: datetime | None = None
+    is_admin: bool = False
 
 
 class ServerSchema(BaseModel):
