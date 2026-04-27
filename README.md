@@ -210,7 +210,8 @@ python seed.py
 ### 5. 启动后端
 
 ```bash
-uvicorn main:app --reload --port 8000
+cd backend
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 ### 6. 打开前端

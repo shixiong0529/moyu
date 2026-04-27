@@ -14,6 +14,7 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(32), nullable=False)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     avatar_color: Mapped[str] = mapped_column(String(8), nullable=False, default="av-1", server_default="av-1")
+    avatar_url: Mapped[str | None] = mapped_column(String(256), nullable=True, default=None)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="online", server_default="online")
     bio: Mapped[str | None] = mapped_column(String(256), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())

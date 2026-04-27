@@ -10,6 +10,7 @@ class UserSchema(BaseModel):
     username: str
     display_name: str
     avatar_color: str
+    avatar_url: str | None = None
     status: str
     bio: str | None = None
     created_at: datetime | None = None
@@ -147,6 +148,7 @@ class UserUpdateRequest(BaseModel):
     bio: str | None = Field(default=None, max_length=256)
     status: str | None = Field(default=None, pattern=r"^(online|idle|dnd|offline)$")
     avatar_color: str | None = Field(default=None, pattern=r"^av-[1-8]$")
+    avatar_url: str | None = Field(default=None, max_length=256)
 
 
 class TelegramNotifyUpdate(BaseModel):

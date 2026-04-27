@@ -87,6 +87,7 @@ def message_to_dict(message: Message, current_user_id: int) -> dict:
             "username": message.author.username,
             "display_name": message.author.display_name,
             "avatar_color": message.author.avatar_color,
+            "avatar_url": message.author.avatar_url,
             "status": message.author.status,
             "bio": message.author.bio,
             "created_at": message.author.created_at,

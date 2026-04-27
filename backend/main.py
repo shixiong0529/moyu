@@ -56,6 +56,9 @@ def ensure_schema_compatibility() -> None:
             connection.execute(text("ALTER TABLE servers ADD COLUMN is_recommended BOOLEAN NOT NULL DEFAULT false"))
         if "join_policy" not in server_columns:
             connection.execute(text("ALTER TABLE servers ADD COLUMN join_policy VARCHAR(16) NOT NULL DEFAULT 'approval'"))
+        user_columns = {column["name"] for column in inspector.get_columns("users")} if inspector.has_table("users") else set()
+        if "avatar_url" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN avatar_url VARCHAR(256)"))
         for table in (JoinRequest.__table__, FriendRequest.__table__, Friendship.__table__):
             table.create(bind=connection, checkfirst=True)
         recommended = {

@@ -1403,7 +1403,8 @@ function ProfileCard({ member, position, onClose, onOpenDM }) {
             : 'linear-gradient(120deg, var(--accent), var(--amber))'
         }}/>
         <div className="profile-head">
-          <div className={`avatar ${member.color}`}>
+          <div className={`avatar ${member.avatar_url ? '' : member.color}`} style={{ position: 'relative' }}>
+            {member.avatar_url && <img src={API.assetUrl(member.avatar_url)} alt={member.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', display: 'block' }} />}
             <span className={`status-dot ${member.status || 'online'}`}/>
           </div>
           <button className="btn btn-secondary" onClick={() => { onOpenDM(member); onClose(); }}>Message</button>
@@ -1455,12 +1456,57 @@ function ProfileCard({ member, position, onClose, onOpenDM }) {
 }
 
 /* Settings */
-function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDensity, sendMode = 'enter', setSendMode, initialSection = 'appearance', user, onLogout, reduceMotion, setReduceMotion, fontSize, setFontSize, alwaysTimestamps, setAlwaysTimestamps, blurImages, setBlurImages }) {
+function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDensity, sendMode = 'enter', setSendMode, initialSection = 'appearance', user, onUserUpdate, onLogout, reduceMotion, setReduceMotion, fontSize, setFontSize, alwaysTimestamps, setAlwaysTimestamps, blurImages, setBlurImages }) {
   const [section, setSection] = useStateM(initialSection || 'appearance');
 
   useEffectM(function syncInitialSettingsSection() {
     setSection(initialSection || 'appearance');
   }, [initialSection]);
+
+  // ── Account state ──────────────────────────────────────────────────────────
+  const [displayName, setDisplayName] = useStateM('');
+  const [nameSaving, setNameSaving] = useStateM(false);
+  const [nameError, setNameError] = useStateM('');
+  const [avatarUploading, setAvatarUploading] = useStateM(false);
+  const [avatarError, setAvatarError] = useStateM('');
+  const [nameSaved, setNameSaved] = useStateM(false);
+
+  useEffectM(() => {
+    if (user?.name) setDisplayName(user.name);
+  }, [user?.name, section]);
+
+  const handleAvatarUpload = async (file) => {
+    if (!file) return;
+    setAvatarUploading(true);
+    setAvatarError('');
+    try {
+      const uploaded = await API.upload(file);
+      const updated = await API.patch('/api/users/me', { avatar_url: uploaded.url });
+      onUserUpdate?.(updated);
+    } catch (err) {
+      setAvatarError(err.message || '上传失败，请重试');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const handleSaveDisplayName = async () => {
+    const trimmed = displayName.trim();
+    if (!trimmed || trimmed === user?.name) return;
+    setNameSaving(true);
+    setNameError('');
+    setNameSaved(false);
+    try {
+      const updated = await API.patch('/api/users/me', { display_name: trimmed });
+      onUserUpdate?.(updated);
+      setNameSaved(true);
+      setTimeout(() => setNameSaved(false), 2000);
+    } catch (err) {
+      setNameError(err.message || '保存失败');
+    } finally {
+      setNameSaving(false);
+    }
+  };
 
   // ── Telegram state ─────────────────────────────────────────────────────────
   const { useEffect: useEffectTg } = React;
@@ -1637,27 +1683,75 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
             <h1>我的账号</h1>
             <div className="settings-section">
               <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
-                <div className={`${user.color || 'av-6'}`} style={{ width: 80, height: 80, borderRadius: '50%' }}/>
+                {/* 头像 — 点击上传 */}
+                <label style={{ position: 'relative', width: 80, height: 80, borderRadius: '50%', cursor: avatarUploading ? 'wait' : 'pointer', flexShrink: 0, display: 'block' }} title="点击更换头像">
+                  {user.avatar_url ? (
+                    <img src={API.assetUrl(user.avatar_url)} alt="avatar"
+                      style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', display: 'block' }} />
+                  ) : (
+                    <div className={user.color || 'av-6'} style={{ width: 80, height: 80, borderRadius: '50%' }} />
+                  )}
+                  <div className="avatar-upload-overlay" style={{
+                    position: 'absolute', inset: 0, borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.5)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', fontSize: 11, fontFamily: 'var(--ff-ui)', fontWeight: 600,
+                    gap: 2,
+                    opacity: avatarUploading ? 1 : 0,
+                    transition: 'opacity 0.15s',
+                    pointerEvents: 'none',
+                  }}>
+                    <Icon name="camera" size={18} />
+                    <span>{avatarUploading ? '上传中…' : '更换头像'}</span>
+                  </div>
+                  <input type="file" accept="image/*"
+                    style={{ display: 'none' }}
+                    disabled={avatarUploading}
+                    onChange={e => { handleAvatarUpload(e.target.files?.[0]); e.target.value = ''; }} />
+                </label>
+                {avatarError && <div style={{ fontSize: 12, color: 'var(--rust)', marginTop: 6 }}>{avatarError}</div>}
                 <div>
                   <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink-0)' }}>{user.name}</div>
                   <div style={{ fontFamily: 'var(--ff-mono)', fontSize: 13, color: 'var(--ink-2)', marginTop: 4 }}>{user.handle}</div>
                 </div>
               </div>
             </div>
-            {[
-              ['显示名称', user.name],
-              ['用户名', user.handle],
-              ['电子邮件', 'you@hearth.space'],
-              ['手机号码', '—'],
-            ].map(([k, v]) => (
-              <div className="settings-row" key={k}>
+
+            {/* 显示名称 — 可编辑 */}
+            <div className="settings-section">
+              <div className="settings-row" style={{ marginBottom: 8 }}>
                 <div className="label-block">
-                  <div className="title" style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-2)' }}>{k}</div>
-                  <div style={{ fontSize: 15, marginTop: 4 }}>{v}</div>
+                  <div className="title" style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-2)' }}>显示名称</div>
                 </div>
-                <button className="btn btn-secondary">修改</button>
               </div>
-            ))}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  className="form-input"
+                  value={displayName}
+                  onChange={e => { setDisplayName(e.target.value); setNameError(''); }}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveDisplayName()}
+                  maxLength={32}
+                  style={{ flex: 1 }}
+                />
+                <button
+                  className="btn btn-primary"
+                  onClick={handleSaveDisplayName}
+                  disabled={nameSaving}
+                >
+                  {nameSaving ? '保存中…' : '保存'}
+                </button>
+              </div>
+              {nameError && <div style={{ color: 'var(--rust)', fontSize: 13, marginTop: 6 }}>{nameError}</div>}
+              {nameSaved && <div style={{ color: 'var(--sage)', fontSize: 13, marginTop: 6 }}>已保存</div>}
+            </div>
+
+            {/* 用户名 — 只读 */}
+            <div className="settings-row">
+              <div className="label-block">
+                <div className="title" style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-2)' }}>用户名</div>
+                <div style={{ fontSize: 15, marginTop: 4, fontFamily: 'var(--ff-mono)', color: 'var(--ink-1)' }}>{user.handle}</div>
+              </div>
+            </div>
           </>
         )}
 

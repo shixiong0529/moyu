@@ -127,7 +127,7 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
         </div>
       )}
       <div className="msg-avatar" style={{ marginTop: msg.replyTo ? 18 : 0 }}>
-        <Avatar color={msg.color} label={msg.name?.[0] || '?'} size={36} onClick={e => onOpenProfile(msg, e)} kind={msg.bot ? 'bot' : undefined}/>
+        <Avatar color={msg.color} url={msg.avatar_url} label={msg.name?.[0] || '?'} size={36} onClick={e => onOpenProfile(msg, e)} kind={msg.bot ? 'bot' : undefined}/>
       </div>
       <div className="msg-body" style={{ marginTop: msg.replyTo ? 18 : 0 }}>
         <div className="msg-head">
@@ -408,6 +408,10 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
 
   return (
     <div className="composer-wrap" style={{ position: 'relative' }}>
+      <div className="composer-foot">
+        <span><span className="typing-dots"><i/><i/><i/></span><em style={{ fontStyle: 'italic', fontFamily: 'var(--ff-serif)' }}>{uploadError || error || (uploading ? '图片上传中...' : typingText) || ''}</em></span>
+        <span>{sendMode === 'ctrl-enter' ? 'Ctrl / Cmd + Enter 发送' : 'Shift + Enter 换行'}</span>
+      </div>
       {mentionOpen && (
         <div className="mention-popover">
           {mentionOptions.map((member, index) => (
@@ -508,10 +512,6 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
           <button className={`icon-btn ${emojiOpen ? 'active' : ''}`} title="表情" onClick={() => { setEmojiOpen(o => !o); setEmojiCategory(0); }}><Icon name="smile" size={16}/></button>
           <button className={`send-btn ${val.trim() ? 'ready' : ''}`} disabled={!val.trim()} onClick={submit}><Icon name="send" size={14}/></button>
         </div>
-      </div>
-      <div className="composer-foot">
-        <span><span className="typing-dots"><i/><i/><i/></span><em style={{ fontStyle: 'italic', fontFamily: 'var(--ff-serif)' }}>{uploadError || error || (uploading ? '图片上传中...' : typingText) || ''}</em></span>
-        <span>{sendMode === 'ctrl-enter' ? 'Ctrl / Cmd + Enter 发送' : 'Shift + Enter 换行'}</span>
       </div>
     </div>
   );

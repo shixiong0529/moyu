@@ -59,6 +59,7 @@ function apiMessageToView(message) {
     type: 'message',
     name: author.display_name || author.username || 'Unknown',
     color: author.avatar_color || 'av-1',
+    avatar_url: author.avatar_url || null,
     authorId: author.id,
     channelId: message.channel_id,
     replyToId: message.reply_to_id,
@@ -97,6 +98,7 @@ function apiDMMessageToView(message, currentUserDisplay) {
     type: 'message',
     name: isMine ? currentUserDisplay.name : sender.display_name || sender.username || 'Unknown',
     color: isMine ? currentUserDisplay.color : sender.avatar_color || 'av-1',
+    avatar_url: isMine ? currentUserDisplay.avatar_url : sender.avatar_url || null,
     authorId: sender.id,
     time: formatMessageTime(message.created_at),
     content: message.content || '',
@@ -458,6 +460,7 @@ function App() {
       name: currentUser.display_name,
       handle: '@' + currentUser.username,
       color: currentUser.avatar_color || 'av-6',
+      avatar_url: currentUser.avatar_url || null,
       status: currentUser.status || 'online',
       bio: currentUser.bio,
     };
@@ -508,21 +511,22 @@ function App() {
           handle: '@' + m.user.username,
           name: m.user.display_name,
           color: m.user.avatar_color || 'av-1',
+          avatar_url: m.user.avatar_url || null,
           role: m.role,
           status: m.user.status || 'offline',
           activity: m.user.bio || '',
         }));
         const founders = mapped.filter(m => m.role === 'founder' && m.status === 'online');
         const online = mapped.filter(m => m.role !== 'founder' && m.status === 'online');
+        const dnd = mapped.filter(m => m.status === 'dnd');
         const idle = mapped.filter(m => m.status === 'idle');
-        const dnd = mapped.filter(m => m.status === 'dnd' && !idle.includes(m));
-        const offline = mapped.filter(m => m.status === 'offline' || (!['online','idle','dnd'].includes(m.status)));
+        const offline = mapped.filter(m => m.status === 'offline' || !['online','idle','dnd'].includes(m.status));
         const groups = [];
-        if (founders.length) groups.push({ group: 'Online · Founders', key: 'online-f', items: founders });
-        if (online.length) groups.push({ group: 'Online', key: 'online', items: online });
-        if (dnd.length) { online.push(...dnd); }
-        if (idle.length) groups.push({ group: 'Idle', key: 'idle', items: idle });
-        if (offline.length) groups.push({ group: 'Offline', key: 'offline', items: offline });
+        if (founders.length) groups.push({ group: '在线 · 创建者', key: 'online-f', items: founders });
+        if (online.length) groups.push({ group: '在线', key: 'online', items: online });
+        if (dnd.length) groups.push({ group: '勿扰', key: 'dnd', items: dnd });
+        if (idle.length) groups.push({ group: '离开', key: 'idle', items: idle });
+        if (offline.length) groups.push({ group: '离线', key: 'offline', items: offline });
         setServerMembers(groups);
       } catch {
         if (!cancelled) setServerMembers([]);
@@ -530,8 +534,10 @@ function App() {
     }
 
     fetchMembers();
+    const interval = setInterval(fetchMembers, 30000);
     return function cancelLoadServerMembers() {
       cancelled = true;
+      clearInterval(interval);
     };
   }, [authStatus, activeServerId, isDM, membersRefreshKey]);
 
@@ -816,7 +822,7 @@ function App() {
   const handleOpenSelf = (e) => {
     const rect = e?.currentTarget?.getBoundingClientRect?.();
     setProfileCard({
-      member: { id: 'u-self', name: currentUserDisplay.name, color: currentUserDisplay.color, status: currentUserDisplay.status, role: 'founder' },
+      member: { id: 'u-self', name: currentUserDisplay.name, color: currentUserDisplay.color, avatar_url: currentUserDisplay.avatar_url, status: currentUserDisplay.status, role: 'founder' },
       position: rect ? { x: rect.right + 12, y: rect.top - 300 } : { x: 200, y: 200 },
     });
   };
@@ -979,6 +985,8 @@ function App() {
       <ServerRail
         servers={serverRailItems}
         activeServer={activeServerId}
+        theme={theme}
+        onSetTheme={setTheme}
         onSelect={(id) => {
           if (id === activeServerId) return;
           setActiveServerId(id);
@@ -1234,6 +1242,7 @@ function App() {
           sendMode={sendMode} setSendMode={setSendMode}
           initialSection={settingsInitialSection}
           user={currentUserDisplay}
+          onUserUpdate={(updated) => setCurrentUser(updated)}
           onLogout={handleLogout}
           reduceMotion={reduceMotion} setReduceMotion={setReduceMotion}
           fontSize={fontSize} setFontSize={setFontSize}

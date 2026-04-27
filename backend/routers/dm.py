@@ -19,6 +19,7 @@ def user_to_dict(user: User) -> dict:
         "username": user.username,
         "display_name": user.display_name,
         "avatar_color": user.avatar_color,
+        "avatar_url": user.avatar_url,
         "status": user.status,
         "bio": user.bio,
         "created_at": user.created_at,

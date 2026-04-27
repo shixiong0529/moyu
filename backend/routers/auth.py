@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from auth import create_access_token, decode_token, hash_password, make_token_pair, verify_password
+from auth import create_access_token, decode_token, get_current_user, hash_password, make_token_pair, verify_password
 from database import get_db
 from models import Channel, ChannelGroup, Server, ServerMember, User
 from schemas import AccessTokenResponse, LoginRequest, OkResponse, RefreshRequest, RegisterRequest, TokenResponse
@@ -76,6 +76,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid username or password")
 
+    user.status = "online"
+    db.commit()
     return make_token_pair(user)
 
 
@@ -93,5 +95,7 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/logout", response_model=OkResponse)
-def logout():
+def logout(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    current_user.status = "offline"
+    db.commit()
     return {"ok": True}

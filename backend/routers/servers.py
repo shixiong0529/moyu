@@ -129,6 +129,7 @@ def user_to_dict(user: User) -> dict:
         "username": user.username,
         "display_name": user.display_name,
         "avatar_color": user.avatar_color,
+        "avatar_url": user.avatar_url,
         "status": user.status,
         "bio": user.bio,
         "created_at": user.created_at,
@@ -436,6 +437,7 @@ def join_request_to_dict(join_request: JoinRequest) -> dict:
             "username": user.username,
             "display_name": user.display_name,
             "avatar_color": user.avatar_color,
+            "avatar_url": user.avatar_url,
             "status": user.status,
             "bio": user.bio,
         } if user else None,
@@ -515,7 +517,7 @@ def reject_join_request(
 
 @router.get("/{server_id}/members")
 def list_members(server_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    require_manager(db, server_id, current_user.id)
+    require_member(db, server_id, current_user.id)
     members = db.scalars(
         select(ServerMember)
         .where(ServerMember.server_id == server_id)
@@ -532,6 +534,7 @@ def list_members(server_id: int, current_user: User = Depends(get_current_user),
                 "username": member.user.username,
                 "display_name": member.user.display_name,
                 "avatar_color": member.user.avatar_color,
+                "avatar_url": member.user.avatar_url,
                 "status": member.user.status,
                 "bio": member.user.bio,
                 "created_at": member.user.created_at,

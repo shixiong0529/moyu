@@ -2,15 +2,28 @@
 
 const { useState } = React;
 
-function Avatar({ color, label, size = 36, kind, status, onClick }) {
-  const style = { width: size, height: size, borderRadius: '50%' };
+const THEME_COLORS = [
+  { key: 'white',    color: '#ffffff', name: '纯白'  },
+  { key: 'slate',    color: '#f0f2f5', name: '石板灰' },
+  { key: 'light',    color: '#faf7f1', name: '暖纸'  },
+  { key: 'dark',     color: '#313338', name: '深色'  },
+  { key: 'forest',   color: '#1e2921', name: '苔绿'  },
+  { key: 'midnight', color: '#0d0f11', name: '午夜'  },
+];
+
+function Avatar({ color, label, size = 36, kind, status, onClick, url }) {
   return (
     <div
-      className={`${color} ${kind === 'bot' ? 'bot-avatar' : ''}`}
-      style={{ ...style, position: 'relative', cursor: onClick ? 'pointer' : 'default', flexShrink: 0 }}
+      className={`${url ? '' : (color || '')} ${kind === 'bot' ? 'bot-avatar' : ''}`}
+      style={{ width: size, height: size, borderRadius: '50%', position: 'relative', cursor: onClick ? 'pointer' : 'default', flexShrink: 0 }}
       onClick={onClick}
     >
-      <div className="avatar-label" style={{ fontSize: size * 0.42 }}>{label}</div>
+      {url ? (
+        <img src={API.assetUrl(url)} alt={label}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: '50%' }} />
+      ) : (
+        <div className="avatar-label" style={{ fontSize: size * 0.42 }}>{label}</div>
+      )}
       {status && <span className={`status-dot ${status}`} />}
     </div>
   );
@@ -27,10 +40,13 @@ function ServerRail({
   onDeleteServer,
   onLeave,
   servers = SERVERS,
+  theme,
+  onSetTheme,
 }) {
   const [menu, setMenu] = useState(null);
   return (
     <div className="server-rail">
+      <div className="server-rail-scroll">
       {servers.map((s, i) => {
         if (s.id === 'divider' || s.id === 'divider2') return <div key={i} className="server-divider" />;
         const active = activeServer === s.id;
@@ -111,6 +127,34 @@ function ServerRail({
           </div>
         </>
       )}
+      </div>
+      <div className="server-rail-bottom">
+        <div className="server-divider" />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+          {THEME_COLORS.map(({ key, color, name }) => (
+            <button
+              key={key}
+              title={name}
+              onClick={() => onSetTheme?.(key)}
+              style={{
+                width: 22, height: 22,
+                borderRadius: '50%',
+                background: color,
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+                outline: 'none',
+                boxSizing: 'border-box',
+                boxShadow: theme === key
+                  ? `0 0 0 2px var(--rail-bg), 0 0 0 4px var(--ink-0)`
+                  : `0 0 0 1.5px rgba(255,255,255,0.25), inset 0 0 0 1px rgba(0,0,0,0.15)`,
+                transform: theme === key ? 'scale(1.1)' : 'scale(1)',
+                transition: 'box-shadow 0.15s ease, transform 0.15s ease',
+              }}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -246,8 +290,15 @@ function UserCard({ user, onOpenSettings, onOpenProfile, onOpenTelegram, muted, 
   return (
     <div className="user-card">
       <div className="avatar" onClick={onOpenProfile}>
-        <div className={`${color}`} style={{ width: 32, height: 32, borderRadius: '50%' }}/>
-        <div className="avatar-label" style={{ position: 'absolute', inset: 0, fontSize: 13 }}>{label}</div>
+        {user.avatar_url ? (
+          <img src={API.assetUrl(user.avatar_url)} alt={user.name}
+            style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', display: 'block' }} />
+        ) : (
+          <>
+            <div className={`${color}`} style={{ width: 32, height: 32, borderRadius: '50%' }}/>
+            <div className="avatar-label" style={{ position: 'absolute', inset: 0, fontSize: 13 }}>{label}</div>
+          </>
+        )}
         <span className={`status-dot ${status}`} />
       </div>
       <div className="info" onClick={onOpenProfile}>
@@ -288,7 +339,10 @@ function MemberSidebar({ members, onOpenMember }) {
               className={`member-item ${m.status === 'offline' ? 'offline' : ''}`}
               onClick={(e) => onOpenMember(m, e)}
             >
-              <div className={`avatar ${m.color}`}>
+              <div className={`avatar ${m.avatar_url ? '' : m.color}`} style={{ position: 'relative' }}>
+                {m.avatar_url
+                  ? <img src={API.assetUrl(m.avatar_url)} alt={m.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', display: 'block' }} />
+                  : null}
                 <span className={`status-dot ${m.status}`} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
