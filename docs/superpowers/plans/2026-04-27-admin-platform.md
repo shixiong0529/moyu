@@ -210,7 +210,25 @@ git commit -m "feat: alembic migration for admin platform tables and user fields
 - Modify: `backend/main.py`
 - Modify: `backend/routers/auth.py`
 
-- [ ] **Step 1: Add ADMIN_USERNAME bootstrap to lifespan in `backend/main.py`**
+- [ ] **Step 1: Add `is_admin` field to `UserSchema` in `backend/schemas.py`**
+
+The frontend's `/api/users/me` returns `UserSchema`. The admin login check reads `me.is_admin`, so `is_admin` must be exposed. In `backend/schemas.py`, add one line to `UserSchema`:
+
+```python
+class UserSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    username: str
+    display_name: str
+    avatar_color: str
+    avatar_url: str | None = None
+    status: str
+    bio: str | None = None
+    created_at: datetime | None = None
+    is_admin: bool = False     # ← add this line
+```
+
+- [ ] **Step 2: Add ADMIN_USERNAME bootstrap to lifespan in `backend/main.py`**
 
 Replace the lifespan function:
 
@@ -242,7 +260,7 @@ async def lifespan(app: FastAPI):
     yield
 ```
 
-- [ ] **Step 2: Add `is_banned` check to login in `backend/routers/auth.py`**
+- [ ] **Step 3: Add `is_banned` check to login in `backend/routers/auth.py`**
 
 In the `login` function, after the password check line:
 ```python
@@ -256,7 +274,7 @@ Add immediately after:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=user.banned_reason or "account banned")
 ```
 
-- [ ] **Step 3: Add `ADMIN_USERNAME` to `.env.example`**
+- [ ] **Step 4: Add `ADMIN_USERNAME` to `.env.example`**
 
 In `backend/.env.example`, append:
 ```env
@@ -264,7 +282,7 @@ In `backend/.env.example`, append:
 ADMIN_USERNAME=
 ```
 
-- [ ] **Step 4: Restart server and verify bootstrap**
+- [ ] **Step 5: Restart server and verify bootstrap**
 
 Set `ADMIN_USERNAME=demo1` in `backend/.env`, restart server, then:
 ```bash
@@ -278,11 +296,11 @@ with engine.connect() as c:
 ```
 Expected: `('demo1', True)` (or 1 depending on DB driver)
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add backend/main.py backend/routers/auth.py backend/.env.example
-git commit -m "feat: ADMIN_USERNAME bootstrap on startup, is_banned login check"
+git add backend/schemas.py backend/main.py backend/routers/auth.py backend/.env.example
+git commit -m "feat: ADMIN_USERNAME bootstrap on startup, is_banned login check, is_admin in UserSchema"
 ```
 
 ---
@@ -464,7 +482,14 @@ def create_report(
     return report
 ```
 
-- [ ] **Step 2: Register reports router in `backend/main.py`**
+- [ ] **Step 2: Create `backend/routers/admin.py` placeholder first (required before main.py import)**
+
+```python
+from fastapi import APIRouter
+router = APIRouter(prefix="/api/admin", tags=["admin"])
+```
+
+- [ ] **Step 3: Register reports and admin routers in `backend/main.py`**
 
 Change the imports line from:
 ```python
@@ -478,20 +503,13 @@ from routers import telegram_bot
 from routers import admin as admin_router
 ```
 
-And after `app.include_router(telegram_bot.router)` add:
+After `app.include_router(telegram_bot.router)` add:
 ```python
 app.include_router(reports.router)
 app.include_router(admin_router.router)
 ```
 
 Also add `"admin.jsx"` to the `FRONTEND_FILES` set.
-
-- [ ] **Step 3: Create an empty `backend/routers/admin.py` placeholder so the import doesn't fail**
-
-```python
-from fastapi import APIRouter
-router = APIRouter(prefix="/api/admin", tags=["admin"])
-```
 
 - [ ] **Step 4: Restart server and verify report endpoint exists**
 
@@ -533,7 +551,7 @@ from models import (
 )
 from schemas import (
     AdminServerSchema, AdminStatsSchema, AdminUserSchema,
-    AuditLogSchema, BanRequest, OkResponse, ReportSchema,
+    AuditLogSchema, BanRequest, ChannelSchema, OkResponse, ReportSchema,
     ResolveReportRequest, SetAdminRequest,
 )
 
@@ -742,8 +760,6 @@ def toggle_recommended(server_id: int, admin: User = Depends(require_admin), db:
 
 # ── Channels ─────────────────────────────────────────────────────
 
-from schemas import ChannelSchema
-
 @router.get("/servers/{server_id}/channels", response_model=list[ChannelSchema])
 def list_server_channels(server_id: int, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     return db.scalars(select(Channel).where(Channel.server_id == server_id).order_by(Channel.position)).all()
@@ -845,23 +861,6 @@ def dismiss_report(
 
 
 # ── Invites ──────────────────────────────────────────────────────
-
-from schemas import ServerSchema
-
-class InviteAdminSchema(ServerSchema.__class__.__bases__[0]):
-    model_config = ServerSchema.model_config
-    id: int
-    server_id: int
-    creator_id: int
-    code: str
-    uses: int
-    max_uses: int | None = None
-    expires_at: datetime | None = None
-    created_at: datetime
-
-    from pydantic import ConfigDict
-    model_config = ConfigDict(from_attributes=True)
-
 
 @router.get("/invites")
 def list_invites(
@@ -988,7 +987,7 @@ git commit -m "feat: admin router — servers, channels, reports, invites, join-
 </head>
 <body>
   <div id="root"></div>
-  <script type="text/babel" src="admin.jsx" data-type="module"></script>
+  <script type="text/babel" src="admin.jsx"></script>
 </body>
 </html>
 ```
@@ -1726,18 +1725,21 @@ git commit -m "feat: admin.jsx — servers, reports, invites, join-requests, aud
 
 - [ ] **Step 1: Add admin.html and admin.jsx to served files**
 
-In `backend/main.py`, find the `FRONTEND_FILES` set and add `"admin.jsx"`. Then add an explicit route for `admin.html`:
+In `backend/main.py`, find the `FRONTEND_FILES` set and add `"admin.jsx"`. Then:
 
 After the `FRONTEND_ENTRY` definition add:
 ```python
 ADMIN_ENTRY = PROJECT_ROOT / "admin.html"
 ```
 
-After the existing `@app.get("/{filename}")` route, add:
+**IMPORTANT:** Add the `/admin.html` route **BEFORE** the existing `@app.get("/{filename}")` wildcard route. FastAPI matches routes in registration order — if `/{filename}` is registered first it will catch `/admin.html` and return 404.
+
 ```python
 @app.get("/admin.html")
-def admin_html():
+def serve_admin_html():
     return no_store_file(ADMIN_ENTRY)
+
+# ... existing @app.get("/{filename}") route stays AFTER this
 ```
 
 - [ ] **Step 2: Restart and final smoke test**
