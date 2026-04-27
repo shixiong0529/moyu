@@ -1,6 +1,6 @@
 # Biscord · Hearth Community
 
-> 一个仿 Discord 风格的中文互动社区平台，支持服务器、频道、实时聊天、私信、好友系统和 Telegram 推送通知。
+> 一个摸鱼风格的中文互动社区平台，支持服务器、频道、实时聊天、私信、好友系统和 Telegram 推送通知。
 
 ![Biscord Login](docs/demo-login.png)
 
