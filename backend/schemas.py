@@ -186,6 +186,9 @@ class AdminServerSchema(BaseModel):
     owner_id: int
     created_at: datetime | None = None
     member_count: int = 0
+    owner_username: str = ""
+    owner_display_name: str = ""
+    mods: list[str] = []
 
 
 class ReportSchema(BaseModel):

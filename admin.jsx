@@ -290,7 +290,7 @@ function UserDetailPage({ userId, onBack }) {
       <BackBtn onClick={onBack} />
       <h2 style={{ margin: '0 0 20px' }}>{user.display_name} <span style={{ fontSize: 14, color: 'var(--ink-2)' }}>@{user.username}</span></h2>
       <Flash msg={msg} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+      <div style={{ display: 'inline-grid', gridTemplateColumns: 'auto auto', gap: 12, marginBottom: 24 }}>
         <InfoRow label="ID" value={user.id} />
         <InfoRow label="状态" value={user.status} />
         <InfoRow label="管理员" value={user.is_admin ? '是' : '否'} />
@@ -362,11 +362,13 @@ function ServerDetailPage({ serverId, onBack }) {
       <BackBtn onClick={onBack} />
       <h2 style={{ margin: '0 0 20px' }}>{server.name}</h2>
       <Flash msg={msg} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'inline-grid', gridTemplateColumns: 'auto auto', gap: 12, marginBottom: 20 }}>
         <InfoRow label="成员数" value={server.member_count} />
-        <InfoRow label="加入策略" value={server.join_policy} />
+        <InfoRow label="加入策略" value={{ open: '自由加入', approval: '需要审核', closed: '禁止加入' }[server.join_policy] || server.join_policy} />
         <InfoRow label="推荐" value={server.is_recommended ? '是' : '否'} />
         <InfoRow label="创建时间" value={fmtTime(server.created_at)} />
+        <InfoRow label="创建人" value={server.owner_display_name ? `${server.owner_display_name}（@${server.owner_username}）` : '-'} />
+        <InfoRow label="管理员" value={server.mods && server.mods.length > 0 ? server.mods.join('、') : '无'} />
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
         <Btn onClick={() => act(() => api.patch(`/api/admin/servers/${serverId}/recommended`))}>
@@ -439,7 +441,7 @@ function ReportDetailPage({ reportId, onBack }) {
       <BackBtn onClick={onBack} />
       <h2 style={{ margin: '0 0 20px' }}>举报详情 #{report.id}</h2>
       <Flash msg={msg} />
-      <div style={{ display: 'grid', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'inline-grid', gridTemplateColumns: 'auto auto', gap: 12, marginBottom: 20 }}>
         <InfoRow label="举报类型" value={report.target_type} />
         <InfoRow label="目标 ID" value={report.target_id} />
         <InfoRow label="状态" value={report.status} />

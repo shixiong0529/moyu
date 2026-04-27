@@ -236,8 +236,16 @@ def get_server(server_id: int, admin: User = Depends(require_admin), db: Session
     if s is None:
         raise HTTPException(status_code=404, detail="server not found")
     count = db.scalar(select(func.count()).select_from(ServerMember).where(ServerMember.server_id == server_id))
+    owner = db.get(User, s.owner_id)
+    mod_members = db.scalars(
+        select(ServerMember).where(ServerMember.server_id == server_id, ServerMember.role == "mod")
+    ).all()
+    mod_users = [db.get(User, m.user_id) for m in mod_members]
     d = AdminServerSchema.model_validate(s)
     d.member_count = count
+    d.owner_username = owner.username if owner else ""
+    d.owner_display_name = owner.display_name if owner else ""
+    d.mods = [f"{u.display_name}（@{u.username}）" for u in mod_users if u]
     return d
 
 
