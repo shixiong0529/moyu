@@ -1,14 +1,15 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import delete as sa_delete, func, select, update as sa_update
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
 from database import get_db
 from models import (
-    AuditLog, Channel, ChannelGroup, Invite, JoinRequest,
-    Message, Report, Server, ServerMember, User,
+    AuditLog, Channel, ChannelGroup, DirectMessage, FriendRequest,
+    Friendship, Invite, JoinRequest, Message, PinnedMessage,
+    Reaction, Report, Server, ServerMember, User,
 )
 from schemas import (
     AdminServerSchema, AdminStatsSchema, AdminUserSchema,
@@ -124,6 +125,62 @@ def set_admin(
     action = "grant_admin" if payload.is_admin else "revoke_admin"
     user.is_admin = payload.is_admin
     write_audit(db, admin.id, action, "user", user_id)
+    db.commit()
+    return OkResponse(ok=True)
+
+
+@router.delete("/users/{user_id}", response_model=OkResponse)
+def delete_user(user_id: int, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    if user_id == admin.id:
+        raise HTTPException(status_code=400, detail="cannot delete yourself")
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    if user.is_admin:
+        raise HTTPException(status_code=400, detail="revoke admin rights before deleting")
+
+    write_audit(db, admin.id, "delete_user", "user", user_id, {"username": user.username})
+
+    # Transfer/delete owned servers
+    for server in list(user.owned_servers):
+        if server.name == "管理员服务器":
+            other = db.scalar(select(User).where(User.is_admin == True, User.id != user_id))
+            if other:
+                server.owner_id = other.id
+                m = db.scalar(select(ServerMember).where(ServerMember.server_id == server.id, ServerMember.user_id == other.id))
+                if m:
+                    m.role = "founder"
+                else:
+                    db.add(ServerMember(server_id=server.id, user_id=other.id, role="founder"))
+        else:
+            db.delete(server)
+    db.flush()
+
+    # Soft-delete messages and DMs
+    db.execute(sa_update(Message).where(Message.author_id == user_id).values(is_deleted=True))
+    db.execute(sa_update(DirectMessage).where(
+        (DirectMessage.sender_id == user_id) | (DirectMessage.receiver_id == user_id)
+    ).values(is_deleted=True))
+
+    # Remove reactions, pins, invites, join requests
+    db.execute(sa_delete(Reaction).where(Reaction.user_id == user_id))
+    db.execute(sa_delete(PinnedMessage).where(PinnedMessage.pinned_by == user_id))
+    db.execute(sa_delete(Invite).where(Invite.creator_id == user_id))
+    db.execute(sa_delete(JoinRequest).where(JoinRequest.user_id == user_id))
+
+    # Remove social data
+    db.execute(sa_delete(Friendship).where((Friendship.user_id == user_id) | (Friendship.friend_id == user_id)))
+    db.execute(sa_delete(FriendRequest).where((FriendRequest.requester_id == user_id) | (FriendRequest.receiver_id == user_id)))
+
+    # Reports: delete filed by user (NOT NULL), nullify resolved_by
+    db.execute(sa_delete(Report).where(Report.reporter_id == user_id))
+    db.execute(sa_update(Report).where(Report.resolved_by == user_id).values(resolved_by=None, resolved_at=None))
+
+    # Audit logs by this user (non-admin, unlikely to exist)
+    db.execute(sa_delete(AuditLog).where(AuditLog.admin_id == user_id))
+
+    db.flush()
+    db.delete(user)
     db.commit()
     return OkResponse(ok=True)
 

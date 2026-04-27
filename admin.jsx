@@ -57,7 +57,7 @@ function Badge({ label, color }) {
   return (
     <span style={{
       display: 'inline-block', padding: '2px 8px', borderRadius: 4,
-      fontSize: 12, fontWeight: 600,
+      fontSize: 13, fontWeight: 600,
       background: color || 'var(--paper-2)', color: 'var(--ink-1)',
     }}>{label}</span>
   );
@@ -65,7 +65,7 @@ function Badge({ label, color }) {
 function Btn({ onClick, children, danger, small, disabled, type }) {
   return (
     <button type={type || 'button'} onClick={onClick} disabled={disabled} style={{
-      padding: small ? '4px 10px' : '7px 16px', fontSize: small ? 12 : 14,
+      padding: small ? '4px 10px' : '7px 16px', fontSize: small ? 13 : 15,
       borderRadius: 6, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
       background: danger ? '#e06c75' : 'var(--accent)', color: 'var(--accent-ink, #fff)',
       opacity: disabled ? 0.5 : 1,
@@ -75,7 +75,7 @@ function Btn({ onClick, children, danger, small, disabled, type }) {
 function Input({ value, onChange, placeholder, onKeyDown, type }) {
   return (
     <input type={type || 'text'} value={value} onChange={onChange} placeholder={placeholder} onKeyDown={onKeyDown}
-      style={{ flex: 1, padding: '7px 12px', borderRadius: 6, border: '1px solid var(--paper-2)', background: 'var(--paper-0)', color: 'var(--ink-0)', fontSize: 14, boxSizing: 'border-box' }} />
+      style={{ flex: 1, padding: '7px 12px', borderRadius: 6, border: '1px solid var(--paper-2)', background: 'var(--paper-0)', color: 'var(--ink-0)', fontSize: 15, boxSizing: 'border-box' }} />
   );
 }
 function Card({ label, value }) {
@@ -89,8 +89,8 @@ function Card({ label, value }) {
 function InfoRow({ label, value }) {
   return (
     <div style={{ background: 'var(--paper-1)', borderRadius: 8, padding: '12px 16px' }}>
-      <div style={{ fontSize: 12, color: 'var(--ink-2)' }}>{label}</div>
-      <div style={{ fontSize: 14, marginTop: 4 }}>{String(value ?? '-')}</div>
+      <div style={{ fontSize: 13, color: 'var(--ink-2)' }}>{label}</div>
+      <div style={{ fontSize: 15, marginTop: 4 }}>{String(value ?? '-')}</div>
     </div>
   );
 }
@@ -100,7 +100,7 @@ function Flash({ msg }) {
 }
 function Table({ cols, rows, onRowClick }) {
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
       <thead>
         <tr>{cols.map(c => (
           <th key={c.key} style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid var(--paper-2)', color: 'var(--ink-2)', fontWeight: 600 }}>{c.label}</th>
@@ -174,12 +174,12 @@ function AdminLogin({ onLogin }) {
         <label style={{ display: 'block', marginBottom: 12 }}>
           <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>用户名</span>
           <input value={username} onChange={e => setUsername(e.target.value)} required
-            style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', borderRadius: 6, border: '1px solid var(--paper-2)', background: 'var(--paper-0)', color: 'var(--ink-0)', fontSize: 14, boxSizing: 'border-box' }} />
+            style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', borderRadius: 6, border: '1px solid var(--paper-2)', background: 'var(--paper-0)', color: 'var(--ink-0)', fontSize: 15, boxSizing: 'border-box' }} />
         </label>
         <label style={{ display: 'block', marginBottom: 20 }}>
-          <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>密码</span>
+          <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>密码</span>
           <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
-            style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', borderRadius: 6, border: '1px solid var(--paper-2)', background: 'var(--paper-0)', color: 'var(--ink-0)', fontSize: 14, boxSizing: 'border-box' }} />
+            style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', borderRadius: 6, border: '1px solid var(--paper-2)', background: 'var(--paper-0)', color: 'var(--ink-0)', fontSize: 15, boxSizing: 'border-box' }} />
         </label>
         <Btn type="submit" disabled={loading}>{loading ? '登录中…' : '登录'}</Btn>
       </form>
@@ -202,14 +202,14 @@ function AdminSidebar({ page, onNav, onLogout, adminUser }) {
   return (
     <div style={{ width: 200, background: 'var(--paper-1)', display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--paper-2)', flexShrink: 0 }}>
       <div style={{ padding: '20px 16px 12px', borderBottom: '1px solid var(--paper-2)' }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink-0)' }}>管理后台</div>
-        <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 2 }}>{adminUser?.display_name}</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink-0)' }}>管理后台</div>
+        <div style={{ fontSize: 13, color: 'var(--ink-2)', marginTop: 2 }}>{adminUser?.display_name}</div>
       </div>
       <nav style={{ flex: 1, padding: '8px 0' }}>
         {NAV.map(n => (
           <div key={n.id} onClick={() => onNav(n.id)}
             style={{
-              padding: '9px 16px', cursor: 'pointer', fontSize: 13,
+              padding: '9px 16px', cursor: 'pointer', fontSize: 14,
               color: page === n.id ? 'var(--accent)' : 'var(--ink-1)',
               background: page === n.id ? 'var(--paper-2)' : 'transparent',
               borderLeft: page === n.id ? '3px solid var(--accent)' : '3px solid transparent',
@@ -273,7 +273,10 @@ function UserDetailPage({ userId, onBack }) {
   const [banReason, setBanReason] = React.useState('');
   const [msg, setMsg] = React.useState('');
 
-  async function act(fn) { try { await fn(); setMsg('操作成功'); setRev(r => r + 1); } catch (e) { setMsg(e.message); } }
+  async function act(fn, afterFn) {
+    try { await fn(); setMsg('操作成功'); if (afterFn) afterFn(); else setRev(r => r + 1); }
+    catch (e) { setMsg(e.message); }
+  }
 
   if (loading) return <Spinner />;
   if (error) return <Err msg={error} />;
@@ -299,6 +302,12 @@ function UserDetailPage({ userId, onBack }) {
           <Btn onClick={() => act(() => api.patch(`/api/admin/users/${userId}/admin`, { is_admin: !user.is_admin }))}>
             {user.is_admin ? '撤销管理员' : '提升为管理员'}
           </Btn>
+        </div>
+        <div style={{ marginTop: 8, paddingTop: 16, borderTop: '1px solid var(--paper-2)' }}>
+          <Btn danger onClick={() => {
+            if (!confirm(`确认永久删除用户「${user.username}」？此操作不可撤销，用户的消息将被软删除，所属服务器将被删除。`)) return;
+            act(() => api.del(`/api/admin/users/${userId}`), onBack);
+          }}>永久删除用户</Btn>
         </div>
       </div>
     </div>
@@ -332,10 +341,13 @@ function ServersPage({ onNav }) {
 function ServerDetailPage({ serverId, onBack }) {
   const [rev, setRev] = React.useState(0);
   const { loading, data: server, error } = useAsync(() => api.get(`/api/admin/servers/${serverId}`), [serverId, rev]);
-  const { data: channels } = useAsync(() => api.get(`/api/admin/servers/${serverId}/channels`), [serverId]);
+  const { data: channels } = useAsync(() => api.get(`/api/admin/servers/${serverId}/channels`), [serverId, rev]);
   const [msg, setMsg] = React.useState('');
 
-  async function act(fn) { try { await fn(); setMsg('操作成功'); setRev(r => r + 1); } catch (e) { setMsg(e.message); } }
+  async function act(fn, afterFn) {
+    try { await fn(); setMsg('操作成功'); if (afterFn) afterFn(); else setRev(r => r + 1); }
+    catch (e) { setMsg(e.message); }
+  }}
 
   if (loading) return <Spinner />;
   if (error) return <Err msg={error} />;
@@ -354,7 +366,7 @@ function ServerDetailPage({ serverId, onBack }) {
         <Btn onClick={() => act(() => api.patch(`/api/admin/servers/${serverId}/recommended`))}>
           {server.is_recommended ? '取消推荐' : '设为推荐'}
         </Btn>
-        <Btn danger onClick={() => { if (!confirm('确认强制删除该服务器？')) return; act(() => api.del(`/api/admin/servers/${serverId}`)); }}>
+        <Btn danger onClick={() => { if (!confirm('确认强制删除该服务器？此操作不可撤销。')) return; act(() => api.del(`/api/admin/servers/${serverId}`), onBack); }}>
           强制删除
         </Btn>
       </div>
@@ -552,9 +564,9 @@ function AdminShell({ adminUser }) {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: 'var(--paper-0)', color: 'var(--ink-0)' }}>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--paper-0)', color: 'var(--ink-0)' }}>
       <AdminSidebar page={nav.page} onNav={goTo} onLogout={logout} adminUser={adminUser} />
-      <main style={{ flex: 1, overflow: 'auto' }}>{renderPage()}</main>
+      <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>{renderPage()}</main>
     </div>
   );
 }
@@ -582,7 +594,7 @@ function AdminApp() {
   }
 
   return (
-    <div className="app theme-forest density-default">
+    <div className="app theme-forest density-default" style={{ height: '100vh', overflow: 'hidden', fontSize: 15 }}>
       {adminUser ? <AdminShell adminUser={adminUser} /> : <AdminLogin onLogin={setAdminUser} />}
     </div>
   );
