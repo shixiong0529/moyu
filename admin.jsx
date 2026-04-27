@@ -170,7 +170,7 @@ function AdminLogin({ onLogin }) {
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--paper-0)' }}>
+    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--paper-0)' }}>
       <form onSubmit={handleSubmit} style={{ width: 320, background: 'var(--paper-1)', borderRadius: 12, padding: 32, boxShadow: '0 4px 24px rgba(0,0,0,.2)' }}>
         <h2 style={{ margin: '0 0 24px', fontSize: 20, color: 'var(--ink-0)' }}>摸鱼社区 · 管理后台</h2>
         {error && <div style={{ marginBottom: 12, padding: '8px 12px', background: 'var(--paper-2)', borderRadius: 6, color: '#e06c75', fontSize: 13 }}>{error}</div>}
