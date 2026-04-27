@@ -134,3 +134,73 @@ APP_BASE_URL=https://shi.show
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_WEBHOOK_SECRET=
 ```
+
+## SSL 证书续期
+
+**自动续期正常，无需手动操作。**
+
+Certbot 注册了 systemd timer，每天运行两次 `certbot renew`，证书剩余不足 30 天时自动续期。
+
+验证 timer 状态：
+
+```bash
+sudo systemctl status certbot.timer
+```
+
+看到 `active (waiting)` 即正常。
+
+### 已知问题：`certbot renew --dry-run` 会失败
+
+`--dry-run` 使用 Let's Encrypt 的 **Staging 测试服务器**，阿里云屏蔽了这些 IP，导致 403。但真实续期（`certbot renew` 不带 `--dry-run`）使用**生产服务器**，不受影响，可以正常续期。
+
+**结论：不要用 `--dry-run` 测试，直接续期即可。**
+
+### 需要手动续期时
+
+逐个域名执行（选 `K` 保持现有密钥类型，选 `2` 续期）：
+
+```bash
+sudo certbot certonly --webroot -w /var/www/certbot -d shi.show -d www.shi.show
+sudo certbot certonly --webroot -w /var/www/certbot -d moyu.in -d www.moyu.in
+sudo certbot certonly --webroot -w /var/www/certbot -d chat.slow.best
+sudo nginx -s reload
+```
+
+证书到期时间：
+
+```bash
+sudo certbot certificates
+```
+
+**逐个域名续期：**
+
+```bash
+# shi.show
+sudo certbot certonly --webroot -w /var/www/certbot -d shi.show -d www.shi.show
+
+# moyu.in
+sudo certbot certonly --webroot -w /var/www/certbot -d moyu.in -d www.moyu.in
+
+# chat.slow.best（需确认 red 的 nginx 配置有 challenge 路径）
+sudo certbot certonly --webroot -w /var/www/certbot -d chat.slow.best
+```
+
+续期后重载 nginx：
+
+```bash
+sudo nginx -s reload
+```
+
+**验证：**
+
+```bash
+sudo certbot certificates
+curl -I https://shi.show
+curl -I https://moyu.in
+```
+
+### 证书到期时间
+
+```bash
+sudo certbot certificates
+```

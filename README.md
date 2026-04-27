@@ -596,6 +596,52 @@ python -m alembic upgrade head
 
 ---
 
+## 部署与运维
+
+### Nginx 配置
+
+站点配置文件位于 `/etc/nginx/sites-enabled/`，每个域名一个文件。配置结构：
+
+- **80 端口**：acme-challenge 验证 + 301 跳转 HTTPS
+- **443 端口**：SSL 终止，反向代理到本机 `127.0.0.1:8001`，支持 WebSocket Upgrade
+
+### SSL 证书
+
+使用 Let's Encrypt + Certbot，证书存放于 `/etc/letsencrypt/live/<域名>/`。
+
+**自动续期正常，无需手动操作。** Certbot systemd timer 每天运行两次，证书剩余不足 30 天时自动续期。
+
+> ⚠️ 注意：`certbot renew --dry-run` 在此服务器上会失败（阿里云屏蔽了 Let's Encrypt Staging 测试服务器的 IP），但真实续期完全正常，不影响自动续期。不要用 `--dry-run` 判断续期是否可用。
+
+**申请新域名证书：**
+```bash
+sudo certbot certonly --webroot \
+  -w /var/www/certbot \
+  -d <域名> \
+  -d www.<域名>
+```
+
+**查看证书到期时间：**
+```bash
+sudo certbot certificates
+```
+
+**验证 timer 状态：**
+```bash
+sudo systemctl status certbot.timer
+```
+
+详细续期操作见 `DEPLOY_UPDATE.md`。
+
+### 已配置域名
+
+| 域名 | 配置文件 | 后端端口 |
+|------|---------|---------|
+| shi.show | `/etc/nginx/sites-enabled/shixiong` | 8001 |
+| moyu.in | `/etc/nginx/sites-enabled/moyu.in` | 8001 |
+
+---
+
 ## License
 
 MIT
