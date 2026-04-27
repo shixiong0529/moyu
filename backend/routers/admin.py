@@ -140,44 +140,65 @@ def delete_user(user_id: int, admin: User = Depends(require_admin), db: Session 
         raise HTTPException(status_code=400, detail="revoke admin rights before deleting")
 
     write_audit(db, admin.id, "delete_user", "user", user_id, {"username": user.username})
-
-    # Transfer/delete owned servers
-    for server in list(user.owned_servers):
-        if server.name == "管理员服务器":
-            other = db.scalar(select(User).where(User.is_admin == True, User.id != user_id))
-            if other:
-                server.owner_id = other.id
-                m = db.scalar(select(ServerMember).where(ServerMember.server_id == server.id, ServerMember.user_id == other.id))
-                if m:
-                    m.role = "founder"
-                else:
-                    db.add(ServerMember(server_id=server.id, user_id=other.id, role="founder"))
-        else:
-            db.delete(server)
     db.flush()
 
-    # Soft-delete messages and DMs
-    db.execute(sa_update(Message).where(Message.author_id == user_id).values(is_deleted=True))
-    db.execute(sa_update(DirectMessage).where(
-        (DirectMessage.sender_id == user_id) | (DirectMessage.receiver_id == user_id)
-    ).values(is_deleted=True))
+    # ── 1. 处理所属服务器（全用 Core 操作）──────────────────────────
+    admin_server = db.scalar(
+        select(Server).where(Server.name == "管理员服务器", Server.owner_id == user_id)
+    )
+    if admin_server:
+        other = db.scalar(select(User).where(User.is_admin == True, User.id != user_id))
+        if other:
+            admin_server.owner_id = other.id
+            m = db.scalar(select(ServerMember).where(
+                ServerMember.server_id == admin_server.id, ServerMember.user_id == other.id
+            ))
+            if m:
+                m.role = "founder"
+            else:
+                db.add(ServerMember(server_id=admin_server.id, user_id=other.id, role="founder"))
 
-    # Remove reactions, pins, invites, join requests
+    owned_ids = db.scalars(
+        select(Server.id).where(Server.owner_id == user_id, Server.name != "管理员服务器")
+    ).all()
+    if owned_ids:
+        ch_ids = db.scalars(select(Channel.id).where(Channel.server_id.in_(owned_ids))).all()
+        if ch_ids:
+            msg_sub = select(Message.id).where(Message.channel_id.in_(ch_ids))
+            db.execute(sa_delete(Reaction).where(Reaction.message_id.in_(msg_sub)))
+            db.execute(sa_delete(PinnedMessage).where(PinnedMessage.message_id.in_(msg_sub)))
+            db.execute(sa_delete(Message).where(Message.channel_id.in_(ch_ids)))
+            db.execute(sa_delete(PinnedMessage).where(PinnedMessage.channel_id.in_(ch_ids)))
+            db.execute(sa_delete(Channel).where(Channel.id.in_(ch_ids)))
+        db.execute(sa_delete(ChannelGroup).where(ChannelGroup.server_id.in_(owned_ids)))
+        db.execute(sa_delete(ServerMember).where(ServerMember.server_id.in_(owned_ids)))
+        db.execute(sa_delete(Invite).where(Invite.server_id.in_(owned_ids)))
+        db.execute(sa_delete(JoinRequest).where(JoinRequest.server_id.in_(owned_ids)))
+        db.execute(sa_delete(Server).where(Server.id.in_(owned_ids)))
+    db.flush()
+
+    # ── 2. 删除用户在其他服务器的消息（hard delete，author_id NOT NULL）──
+    user_msg_sub = select(Message.id).where(Message.author_id == user_id)
+    db.execute(sa_delete(Reaction).where(Reaction.message_id.in_(user_msg_sub)))
+    db.execute(sa_delete(PinnedMessage).where(PinnedMessage.message_id.in_(user_msg_sub)))
+    db.execute(sa_delete(Message).where(Message.author_id == user_id))
+
+    # ── 3. 其余关联数据 ───────────────────────────────────────────
     db.execute(sa_delete(Reaction).where(Reaction.user_id == user_id))
     db.execute(sa_delete(PinnedMessage).where(PinnedMessage.pinned_by == user_id))
+    db.execute(sa_delete(DirectMessage).where(
+        (DirectMessage.sender_id == user_id) | (DirectMessage.receiver_id == user_id)
+    ))
     db.execute(sa_delete(Invite).where(Invite.creator_id == user_id))
     db.execute(sa_delete(JoinRequest).where(JoinRequest.user_id == user_id))
-
-    # Remove social data
     db.execute(sa_delete(Friendship).where((Friendship.user_id == user_id) | (Friendship.friend_id == user_id)))
-    db.execute(sa_delete(FriendRequest).where((FriendRequest.requester_id == user_id) | (FriendRequest.receiver_id == user_id)))
-
-    # Reports: delete filed by user (NOT NULL), nullify resolved_by
+    db.execute(sa_delete(FriendRequest).where(
+        (FriendRequest.requester_id == user_id) | (FriendRequest.receiver_id == user_id)
+    ))
     db.execute(sa_delete(Report).where(Report.reporter_id == user_id))
     db.execute(sa_update(Report).where(Report.resolved_by == user_id).values(resolved_by=None, resolved_at=None))
-
-    # Audit logs by this user (non-admin, unlikely to exist)
     db.execute(sa_delete(AuditLog).where(AuditLog.admin_id == user_id))
+    db.execute(sa_delete(ServerMember).where(ServerMember.user_id == user_id))
 
     db.flush()
     db.delete(user)

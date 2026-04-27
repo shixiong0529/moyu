@@ -58,7 +58,8 @@ function Badge({ label, color }) {
     <span style={{
       display: 'inline-block', padding: '2px 8px', borderRadius: 4,
       fontSize: 14, fontWeight: 600,
-      background: color || 'var(--paper-2)', color: 'var(--ink-1)',
+      background: color || 'var(--paper-2)',
+      color: color ? '#fff' : 'var(--ink-1)',
     }}>{label}</span>
   );
 }
