@@ -157,6 +157,11 @@ def serve_frontend_entry():
     return no_store_file(FRONTEND_ENTRY)
 
 
+@app.get("/admin.html", include_in_schema=False)
+def serve_admin_html():
+    return no_store_file(ADMIN_ENTRY)
+
+
 @app.get("/{filename}", include_in_schema=False)
 def serve_frontend_asset(filename: str):
     if filename not in FRONTEND_FILES:
