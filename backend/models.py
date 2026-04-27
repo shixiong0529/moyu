@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -22,6 +22,9 @@ class User(Base):
     telegram_bot_token: Mapped[str | None] = mapped_column(String(128), nullable=True, default=None)
     telegram_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, default=None)
     telegram_notify_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    is_banned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    banned_reason: Mapped[str | None] = mapped_column(String(256), nullable=True, default=None)
 
     owned_servers: Mapped[list["Server"]] = relationship(back_populates="owner")
     memberships: Mapped[list["ServerMember"]] = relationship(back_populates="user", cascade="all, delete-orphan")
@@ -215,3 +218,40 @@ class Invite(Base):
 
     server: Mapped["Server"] = relationship(back_populates="invites")
     creator: Mapped["User"] = relationship()
+
+
+class Report(Base):
+    __tablename__ = "reports"
+    __table_args__ = (
+        UniqueConstraint("reporter_id", "target_type", "target_id", "status",
+                         name="uq_reports_reporter_target_pending"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    reporter_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    target_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reason: Mapped[str] = mapped_column(String(512), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", server_default="pending")
+    resolution_note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    resolved_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+
+    reporter: Mapped["User"] = relationship(foreign_keys=[reporter_id])
+    resolver: Mapped["User | None"] = relationship(foreign_keys=[resolved_by])
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    admin_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    detail: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+
+    admin: Mapped["User"] = relationship(foreign_keys=[admin_id])
