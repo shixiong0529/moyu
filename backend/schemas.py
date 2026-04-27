@@ -154,3 +154,88 @@ class UserUpdateRequest(BaseModel):
 
 class TelegramNotifyUpdate(BaseModel):
     enabled: bool
+
+
+# ── Admin schemas ──────────────────────────────────────────────
+
+class AdminUserSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    username: str
+    display_name: str
+    avatar_color: str
+    avatar_url: str | None = None
+    status: str
+    bio: str | None = None
+    created_at: datetime | None = None
+    is_admin: bool = False
+    is_banned: bool = False
+    banned_reason: str | None = None
+
+
+class AdminServerSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    short_name: str
+    color: str
+    icon_url: str | None = None
+    description: str | None = None
+    is_recommended: bool = False
+    join_policy: str
+    owner_id: int
+    created_at: datetime | None = None
+    member_count: int = 0
+
+
+class ReportSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    reporter_id: int
+    target_type: str
+    target_id: int
+    content_snapshot: str | None = None
+    reason: str
+    status: str
+    resolution_note: str | None = None
+    resolved_by: int | None = None
+    resolved_at: datetime | None = None
+    created_at: datetime
+
+
+class AuditLogSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    admin_id: int
+    action: str
+    target_type: str
+    target_id: int
+    detail: dict | None = None
+    created_at: datetime
+
+
+class AdminStatsSchema(BaseModel):
+    total_users: int
+    total_servers: int
+    total_channels: int
+    total_messages: int
+    new_users_today: int
+    pending_reports: int
+
+
+class BanRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=256)
+
+
+class ResolveReportRequest(BaseModel):
+    note: str = Field(default="", max_length=512)
+
+
+class SetAdminRequest(BaseModel):
+    is_admin: bool
+
+
+class ReportCreateRequest(BaseModel):
+    target_type: str = Field(pattern=r"^(message|user|server)$")
+    target_id: int
+    reason: str = Field(min_length=1, max_length=512)
