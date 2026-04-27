@@ -218,6 +218,19 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000
 
 或者直接双击打开 `Hearth Community.html`（从文件系统打开也可使用，但图片上传功能需要后端）
 
+### 7. 重启后端
+
+修改代码或配置后，需要重启后端进程：
+
+```bash
+# 找到并杀掉占用 8000 端口的进程
+for /f "tokens=5" %a in ('netstat -ano ^| findstr :8000') do taskkill /PID %a /F
+
+# 重新启动
+cd backend
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
 ### 测试账号
 
 种子脚本创建了两个测试账号：
