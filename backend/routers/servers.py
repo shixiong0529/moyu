@@ -191,7 +191,14 @@ def list_servers(
         .options(selectinload(Server.owner), selectinload(Server.join_requests))
         .order_by(ServerMember.position, Server.created_at)
     ).all()
-    return [server_to_dict(server, role, request=request) for server, role, _ in rows]
+    # 去重：同一服务器可能因重复 server_members 记录出现多次
+    seen = set()
+    result = []
+    for server, role, _ in rows:
+        if server.id not in seen:
+            seen.add(server.id)
+            result.append(server_to_dict(server, role, request=request))
+    return result
 
 
 @router.patch("/reorder")

@@ -68,8 +68,7 @@ function ServerRail({
       if (!targetId || targetId === dragIdRef.current) return;
       const dragged = dragIdRef.current;
       setLocalServers(prev => {
-        console.log('[drag] prev.length=', prev.length, 'dragged=', dragged, 'target=', targetId);
-        const from = prev.findIndex(s => s.id === dragged);
+const from = prev.findIndex(s => s.id === dragged);
         const to = prev.findIndex(s => s.id === targetId);
         if (from < 0 || to < 0) return prev;
         const next = [...prev];
