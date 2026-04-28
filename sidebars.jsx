@@ -49,7 +49,12 @@ function ServerRail({
   const dragIdRef = React.useRef(null);
   const localServersRef = React.useRef(localServers);
 
-  React.useEffect(() => { setLocalServers(servers); }, [servers]);
+  React.useEffect(() => {
+    const ids = servers.map(s => s.id);
+    const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
+    if (dupes.length) console.warn('[ServerRail] 重复 id:', dupes, ids);
+    setLocalServers(servers);
+  }, [servers]);
   React.useEffect(() => { localServersRef.current = localServers; }, [localServers]);
 
   function startDrag(e, id) {
