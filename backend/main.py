@@ -20,18 +20,38 @@ import telegram_service
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    admin_username = os.getenv("ADMIN_USERNAME", "")
-    if admin_username:
-        from sqlalchemy.orm import Session as _Session
-        with _Session(engine) as _db:
-            from sqlalchemy import select as _select
-            _user = _db.scalar(_select(User).where(User.username == admin_username))
+    from sqlalchemy.orm import Session as _Session
+    from sqlalchemy import select as _select
+    from models import ServerMember as _SM, Server as _Srv, User as _U
+    from datetime import datetime as _dt
+
+    with _Session(engine) as _db:
+        # 1. 提权管理员
+        admin_username = os.getenv("ADMIN_USERNAME", "")
+        if admin_username:
+            _user = _db.scalar(_select(_U).where(_U.username == admin_username))
             if _user is None:
                 import logging
                 logging.warning(f"ADMIN_USERNAME '{admin_username}' not found in database")
             elif not _user.is_admin:
                 _user.is_admin = True
                 _db.commit()
+
+        # 2. 把所有已有用户补加到 auto_join 服务器（幂等）
+        auto_servers = _db.scalars(_select(_Srv).where(_Srv.auto_join == True)).all()
+        all_users = _db.scalars(_select(_U)).all()
+        added = 0
+        for srv in auto_servers:
+            for usr in all_users:
+                exists = _db.scalar(
+                    _select(_SM).where(_SM.server_id == srv.id, _SM.user_id == usr.id)
+                )
+                if exists is None:
+                    _db.add(_SM(server_id=srv.id, user_id=usr.id, role="member", position=srv.join_order))
+                    added += 1
+        if added:
+            _db.commit()
+
     yield
 
 
