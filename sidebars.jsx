@@ -47,7 +47,7 @@ function ServerRail({
   const [localServers, setLocalServers] = React.useState(servers);
   const [dragId, setDragId] = React.useState(null);
 
-  React.useEffect(() => { if (!dragId) setLocalServers(servers); }, [servers, dragId]);
+  React.useEffect(() => { setLocalServers(servers); }, [servers]);
 
   function startDrag(e, id) {
     if (e.button !== 0) return;
