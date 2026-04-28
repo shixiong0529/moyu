@@ -187,7 +187,7 @@ def list_messages(
     limit = max(1, min(limit, 100))
     query = (
         select(Message)
-        .where(Message.channel_id == channel_id)
+        .where(Message.channel_id == channel_id, Message.is_deleted == False)
         .options(selectinload(Message.author), selectinload(Message.reactions))
         .order_by(Message.id.desc())
         .limit(limit + 1)
