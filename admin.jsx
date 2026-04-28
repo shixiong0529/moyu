@@ -331,6 +331,8 @@ function ServersPage({ onNav }) {
     { key: 'member_count', label: '成员数' },
     { key: 'join_policy', label: '加入策略', render: r => <Badge label={r.join_policy} /> },
     { key: 'is_recommended', label: '推荐', render: r => r.is_recommended ? <Badge label="推荐" color="var(--accent-soft,#3d7)" /> : null },
+    { key: 'auto_join', label: '默认加入', render: r => r.auto_join ? <Badge label="是" color="var(--accent)" /> : <span style={{ color: 'var(--ink-2)' }}>否</span> },
+    { key: 'join_order', label: '排序', render: r => r.join_order === 999 || r.join_order == null ? <span style={{ color: 'var(--ink-2)' }}>—</span> : r.join_order },
     { key: 'created_at', label: '创建', render: r => fmtDate(r.created_at) },
   ];
   return (
