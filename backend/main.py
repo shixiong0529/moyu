@@ -56,9 +56,13 @@ def _translate_error(err: dict) -> str:
         return f"{field_cn}不能为空"
     if etype == "string_too_short":
         mn = ctx.get("min_length", "")
+        if field == "password":
+            return f"密码至少需要 {mn} 位"
         return f"{field_cn}至少需要 {mn} 个字符"
     if etype == "string_too_long":
         mx = ctx.get("max_length", "")
+        if field == "password":
+            return f"密码不能超过 {mx} 位"
         return f"{field_cn}不能超过 {mx} 个字符"
     if etype == "string_pattern_mismatch":
         if field == "username":
