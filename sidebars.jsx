@@ -45,33 +45,32 @@ function ServerRail({
 }) {
   const [menu, setMenu] = useState(null);
   const [localServers, setLocalServers] = React.useState(servers);
-  const dragRef = React.useRef(null);
+  const [dragId, setDragId] = React.useState(null);
 
-  React.useEffect(() => { setLocalServers(servers); }, [servers]);
+  React.useEffect(() => { if (!dragId) setLocalServers(servers); }, [servers, dragId]);
 
-  function handleDragStart(e, id) {
-    dragRef.current = id;
-    e.dataTransfer.effectAllowed = 'move';
+  function startDrag(e, id) {
+    if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDragId(id);
   }
 
-  function handleDragOver(e, id) {
-    e.preventDefault();
-    if (!dragRef.current || dragRef.current === id) return;
+  function moveDrag(id) {
+    if (!dragId || dragId === id) return;
     setLocalServers(prev => {
-      const from = prev.findIndex(s => s.id === dragRef.current);
+      const from = prev.findIndex(s => s.id === dragId);
       const to = prev.findIndex(s => s.id === id);
-      if (from === -1 || to === -1) return prev;
+      if (from < 0 || to < 0) return prev;
       const next = [...prev];
       const [item] = next.splice(from, 1);
       next.splice(to, 0, item);
       return next;
     });
-    dragRef.current = id;
   }
 
-  function handleDrop(e) {
-    e.preventDefault();
-    dragRef.current = null;
+  function endDrag() {
+    if (!dragId) return;
+    setDragId(null);
     const ids = localServers.filter(s => !s.kind && s.id !== 'divider' && s.id !== 'divider2').map(s => s.id);
     API.patch('/api/servers/reorder', { order: ids }).catch(() => {});
   }
@@ -83,14 +82,16 @@ function ServerRail({
         if (s.id === 'divider' || s.id === 'divider2') return <div key={i} className="server-divider" />;
         const active = activeServer === s.id;
         const isDraggable = !s.kind;
+        const isDragging = dragId === s.id;
         return (
           <div key={s.id} className={`server-pill ${active ? 'active' : ''}`}
-               draggable={isDraggable}
-               onDragStart={isDraggable ? e => handleDragStart(e, s.id) : undefined}
-               onDragOver={isDraggable ? e => handleDragOver(e, s.id) : undefined}
-               onDrop={isDraggable ? handleDrop : undefined}
-               onDragEnd={() => { dragRef.current = null; }}
+               style={{ opacity: isDragging ? 0.5 : 1, cursor: isDraggable ? (dragId ? 'grabbing' : 'grab') : 'pointer', transition: 'transform 0.12s' }}
+               onPointerDown={isDraggable ? e => startDrag(e, s.id) : undefined}
+               onPointerEnter={isDraggable ? () => moveDrag(s.id) : undefined}
+               onPointerUp={isDraggable ? endDrag : undefined}
+               onPointerCancel={isDraggable ? endDrag : undefined}
                onClick={() => {
+                 if (dragId) return;
                  if (s.kind === 'add') return onAdd();
                  onSelect(s.id);
                }}
