@@ -62,7 +62,7 @@ const api = {
   del: (path) => api._req('DELETE', path),
 };
 
-// ─── Hook ────────────────────────────────────────────────────────
+// ─── Hooks ───────────────────────────────────────────────────────
 function useAsync(fn, deps = []) {
   const [state, setState] = React.useState({ loading: true, data: null, error: null });
   React.useEffect(() => {
@@ -74,101 +74,112 @@ function useAsync(fn, deps = []) {
   }, deps);
   return state;
 }
+// 统一操作反馈：成功/失败分别染色，避免用户误把报错当成功
+function useFlash() {
+  const [flash, setFlash] = React.useState(null); // { text, ok }
+  const ok = text => setFlash({ text, ok: true });
+  const err = text => setFlash({ text: typeof text === 'string' ? text : text.message, ok: false });
+  const clear = () => setFlash(null);
+  return [flash, ok, err, clear];
+}
 
-// ─── UI helpers ──────────────────────────────────────────────────
+// ─── UI primitives ─────────────────────────────────────────────────
 function Spinner() {
-  return React.createElement('div', { style: { padding: 32, textAlign: 'center', color: 'var(--ink-2)' } }, '加载中…');
+  return <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-2)', fontSize: 14 }}>加载中…</div>;
 }
 function Err({ msg }) {
-  return React.createElement('div', { style: { padding: 16, color: '#e06c75' } }, '错误：' + msg);
+  return <div className="adm-flash error" style={{ marginBottom: 0 }}>错误：{msg}</div>;
 }
-function Badge({ label, color }) {
-  return (
-    <span style={{
-      display: 'inline-block', padding: '2px 8px', borderRadius: 4,
-      fontSize: 14, fontWeight: 600,
-      background: color || 'var(--paper-2)',
-      color: color ? '#fff' : 'var(--ink-1)',
-    }}>{label}</span>
-  );
+function Badge({ label, tone }) {
+  return <span className={`adm-badge${tone ? ' ' + tone : ''}`}>{label}</span>;
 }
-function Btn({ onClick, children, danger, small, disabled, type }) {
-  return (
-    <button type={type || 'button'} onClick={onClick} disabled={disabled} style={{
-      padding: small ? '4px 10px' : '7px 16px', fontSize: small ? 14 : 17,
-      borderRadius: 6, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
-      background: danger ? '#e06c75' : 'var(--accent)', color: 'var(--accent-ink, #fff)',
-      opacity: disabled ? 0.5 : 1,
-    }}>{children}</button>
-  );
+function Btn({ onClick, children, danger, ghost, small, active, disabled, type, title }) {
+  const cls = ['adm-btn', danger && 'danger', ghost && 'ghost', small && 'small', active && 'active'].filter(Boolean).join(' ');
+  return <button type={type || 'button'} onClick={onClick} disabled={disabled} className={cls} title={title}>{children}</button>;
 }
-function Input({ value, onChange, placeholder, onKeyDown, type }) {
-  return (
-    <input type={type || 'text'} value={value} onChange={onChange} placeholder={placeholder} onKeyDown={onKeyDown}
-      style={{ flex: 1, padding: '7px 12px', borderRadius: 6, border: '1px solid var(--paper-2)', background: 'var(--paper-0)', color: 'var(--ink-0)', fontSize: 17, boxSizing: 'border-box' }} />
-  );
+function Input({ value, onChange, placeholder, onKeyDown, type, style }) {
+  return <input type={type || 'text'} value={value} onChange={onChange} placeholder={placeholder} onKeyDown={onKeyDown}
+    className="adm-input" style={{ flex: 1, ...style }} />;
 }
-function Card({ label, value }) {
+function Field({ label, hint, children }) {
   return (
-    <div style={{ background: 'var(--paper-1)', borderRadius: 10, padding: '20px 16px', border: '1px solid var(--paper-2)' }}>
-      <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--accent)' }}>{String(value)}</div>
-      <div style={{ fontSize: 13, color: 'var(--ink-2)', marginTop: 4 }}>{label}</div>
+    <div className="adm-field">
+      <label>{label}</label>
+      {children}
+      {hint && <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 4 }}>{hint}</div>}
     </div>
   );
 }
-function InfoRow({ label, value }) {
+function StatCard({ label, value }) {
   return (
-    <div style={{ background: 'var(--paper-1)', borderRadius: 8, padding: '12px 16px' }}>
-      <div style={{ fontSize: 14, color: 'var(--ink-2)' }}>{label}</div>
-      <div style={{ fontSize: 16, marginTop: 4 }}>{String(value ?? '-')}</div>
+    <div className="adm-stat-card">
+      <div className="adm-stat-value">{String(value)}</div>
+      <div className="adm-stat-label">{label}</div>
     </div>
   );
 }
-function Flash({ msg }) {
-  if (!msg) return null;
-  return <div style={{ marginBottom: 12, padding: '8px 12px', background: 'var(--paper-2)', borderRadius: 6, fontSize: 13 }}>{msg}</div>;
+function DetailGrid({ children }) {
+  return <div className="adm-detail-grid">{children}</div>;
+}
+function DetailCell({ label, value }) {
+  return (
+    <div className="adm-detail-cell">
+      <div className="adm-detail-label">{label}</div>
+      <div className="adm-detail-value">{value === undefined || value === null || value === '' ? '-' : value}</div>
+    </div>
+  );
+}
+function Flash({ flash }) {
+  if (!flash) return null;
+  return <div className={`adm-flash ${flash.ok ? 'ok' : 'error'}`}>{flash.text}</div>;
+}
+function Panel({ title, hint, children, style }) {
+  return (
+    <div className="adm-panel" style={style}>
+      {title && <div className="adm-panel-title">{title}</div>}
+      {hint && <div className="adm-panel-hint">{hint}</div>}
+      {children}
+    </div>
+  );
 }
 function Table({ cols, rows, onRowClick }) {
   return (
-    <table style={{ width: 'auto', borderCollapse: 'collapse', fontSize: 16 }}>
-      <thead>
-        <tr>{cols.map(c => (
-          <th key={c.key} style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid var(--paper-2)', color: 'var(--ink-2)', fontWeight: 600 }}>{c.label}</th>
-        ))}</tr>
-      </thead>
-      <tbody>
-        {rows.map((row, i) => (
-          <tr key={row.id ?? i} onClick={() => onRowClick && onRowClick(row)}
-            style={{ cursor: onRowClick ? 'pointer' : 'default', borderBottom: '1px solid var(--paper-2)' }}
-            onMouseEnter={e => { if (onRowClick) e.currentTarget.style.background = 'var(--paper-1)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = ''; }}>
-            {cols.map(c => (
-              <td key={c.key} style={{ padding: '10px 12px', verticalAlign: 'middle' }}>
-                {c.render ? c.render(row) : row[c.key]}
-              </td>
-            ))}
-          </tr>
-        ))}
-        {rows.length === 0 && (
-          <tr><td colSpan={cols.length} style={{ padding: 24, textAlign: 'center', color: 'var(--ink-2)' }}>暂无数据</td></tr>
-        )}
-      </tbody>
-    </table>
+    <div className="adm-table-wrap">
+      <table className="adm-table">
+        <thead>
+          <tr>{cols.map(c => <th key={c.key}>{c.label}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={row.id ?? i} className={onRowClick ? 'clickable' : ''} onClick={() => onRowClick && onRowClick(row)}>
+              {cols.map(c => <td key={c.key}>{c.render ? c.render(row) : row[c.key]}</td>)}
+            </tr>
+          ))}
+          {rows.length === 0 && (
+            <tr><td colSpan={cols.length} className="adm-table-empty">暂无数据</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }
 function SearchBar({ value, onChange, onSearch, placeholder }) {
   return (
-    <div style={{ display: 'inline-flex', gap: 8, marginBottom: 16 }}>
-      <input value={value} onChange={e => onChange(e.target.value)}
-        placeholder={placeholder || '搜索…'}
-        onKeyDown={e => e.key === 'Enter' && onSearch(value)}
-        style={{ width: 300, padding: '7px 12px', borderRadius: 6, border: '1px solid var(--paper-2)', background: 'var(--paper-0)', color: 'var(--ink-0)', fontSize: 17 }} />
+    <div style={{ display: 'flex', gap: 10, marginBottom: 20, maxWidth: 420 }}>
+      <Input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder || '搜索…'}
+        onKeyDown={e => e.key === 'Enter' && onSearch(value)} />
       <Btn onClick={() => onSearch(value)}>搜索</Btn>
     </div>
   );
 }
-function BackBtn({ onClick }) {
-  return <div style={{ marginBottom: 16 }}><Btn small onClick={onClick}>← 返回</Btn></div>;
+function FilterPills({ options, value, onChange }) {
+  return (
+    <div className="adm-filter-row">
+      {options.map(([v, label]) => (
+        <Btn key={v} small ghost active={value === v} onClick={() => onChange(v)}>{label}</Btn>
+      ))}
+    </div>
+  );
 }
 // 简单翻页：后端返回数组无总数，满页(=PAGE_SIZE)即认为可能还有下一页
 function Pager({ page, setPage, count, loading }) {
@@ -176,15 +187,34 @@ function Pager({ page, setPage, count, loading }) {
   const hasNext = count >= PAGE_SIZE;
   if (!hasPrev && !hasNext) return null;
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 16 }}>
-      <Btn small disabled={!hasPrev || loading} onClick={() => setPage(p => Math.max(0, p - 1))}>← 上一页</Btn>
-      <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>第 {page + 1} 页</span>
-      <Btn small disabled={!hasNext || loading} onClick={() => setPage(p => p + 1)}>下一页 →</Btn>
+    <div className="adm-pager">
+      <Btn small ghost disabled={!hasPrev || loading} onClick={() => setPage(p => Math.max(0, p - 1))}>← 上一页</Btn>
+      <span className="adm-pager-info">第 {page + 1} 页</span>
+      <Btn small ghost disabled={!hasNext || loading} onClick={() => setPage(p => p + 1)}>下一页 →</Btn>
     </div>
   );
 }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('zh-CN') : '-'; }
 function fmtTime(d) { return d ? new Date(d).toLocaleString('zh-CN') : '-'; }
+
+// ─── Page shell: 统一每个页面的标题栏 / 宽度 / 间距 ───────────────
+function Page({ title, subtitle, back, actions, children }) {
+  return (
+    <div className="adm-page">
+      <div className="adm-page-header">
+        <div className="adm-title-row">
+          {back && <Btn small ghost onClick={back}>← 返回</Btn>}
+          <div>
+            <h1 className="adm-title">{title}</h1>
+            {subtitle && <div className="adm-subtitle">{subtitle}</div>}
+          </div>
+        </div>
+        {actions && <div className="adm-actions">{actions}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
 
 // ─── Login ───────────────────────────────────────────────────────
 function AdminLogin({ onLogin }) {
@@ -212,23 +242,22 @@ function AdminLogin({ onLogin }) {
   }
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--paper-0)' }}>
-      <form onSubmit={handleSubmit} style={{ width: 320, background: 'var(--paper-1)', borderRadius: 12, padding: 32, boxShadow: '0 4px 24px rgba(0,0,0,.2)' }}>
-        <h2 style={{ margin: '0 0 24px', fontSize: 20, color: 'var(--ink-0)', textAlign: 'center' }}>摸鱼社区 · 管理后台</h2>
-        {error && <div style={{ marginBottom: 12, padding: '8px 12px', background: 'var(--paper-2)', borderRadius: 6, color: '#e06c75', fontSize: 13 }}>{error}</div>}
-        <label style={{ display: 'block', marginBottom: 12 }}>
-          <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>用户名</span>
-          <input value={username} onChange={e => setUsername(e.target.value)} required
-            style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', borderRadius: 6, border: '1px solid var(--paper-2)', background: 'var(--paper-0)', color: 'var(--ink-0)', fontSize: 17, boxSizing: 'border-box' }} />
-        </label>
-        <label style={{ display: 'block', marginBottom: 20 }}>
-          <span style={{ fontSize: 14, color: 'var(--ink-2)' }}>密码</span>
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
-            style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', borderRadius: 6, border: '1px solid var(--paper-2)', background: 'var(--paper-0)', color: 'var(--ink-0)', fontSize: 17, boxSizing: 'border-box' }} />
-        </label>
-        <div style={{ textAlign: 'center' }}>
-          <Btn type="submit" disabled={loading}>{loading ? '登录中…' : '登录'}</Btn>
+    <div className="adm-login-wrap">
+      <form onSubmit={handleSubmit} className="adm-login-card">
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+          <div className="adm-brand-mark" style={{ width: 40, height: 40, fontSize: 18, borderRadius: 12 }}>摸</div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--ink-0)' }}>摸鱼社区 · 管理后台</div>
         </div>
+        {error && <div className="adm-flash error">{error}</div>}
+        <Field label="用户名">
+          <input className="adm-input" value={username} onChange={e => setUsername(e.target.value)} required autoFocus />
+        </Field>
+        <Field label="密码">
+          <input className="adm-input" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+        </Field>
+        <button type="submit" disabled={loading} className="adm-btn" style={{ width: '100%', marginTop: 6, padding: '10px 18px' }}>
+          {loading ? '登录中…' : '登录'}
+        </button>
       </form>
     </div>
   );
@@ -236,36 +265,38 @@ function AdminLogin({ onLogin }) {
 
 // ─── Sidebar ─────────────────────────────────────────────────────
 const NAV = [
-  { id: 'dashboard', label: '📊 概览' },
-  { id: 'users', label: '👤 用户管理' },
-  { id: 'servers', label: '🏠 服务器管理' },
-  { id: 'bots', label: '🤖 机器人' },
-  { id: 'reports', label: '🚨 举报队列' },
-  { id: 'invites', label: '🔗 邀请码' },
-  { id: 'join-requests', label: '📋 加入申请' },
-  { id: 'audit-logs', label: '📜 操作日志' },
+  { id: 'dashboard', icon: '📊', label: '概览' },
+  { id: 'users', icon: '👤', label: '用户管理' },
+  { id: 'servers', icon: '🏠', label: '服务器管理' },
+  { id: 'bots', icon: '🤖', label: '机器人' },
+  { id: 'reports', icon: '🚨', label: '举报队列' },
+  { id: 'invites', icon: '🔗', label: '邀请码' },
+  { id: 'join-requests', icon: '📋', label: '加入申请' },
+  { id: 'audit-logs', icon: '📜', label: '操作日志' },
 ];
 
 function AdminSidebar({ page, onNav, onLogout, adminUser }) {
+  const initial = (adminUser?.display_name || adminUser?.username || '?').slice(0, 1).toUpperCase();
   return (
-    <div style={{ width: 200, background: 'var(--paper-1)', display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--paper-2)', flexShrink: 0 }}>
-      <div style={{ padding: '20px 16px 12px', borderBottom: '1px solid var(--paper-2)' }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-0)' }}>管理后台</div>
-        <div style={{ fontSize: 14, color: 'var(--ink-2)', marginTop: 2 }}>{adminUser?.display_name}</div>
+    <div className="adm-sidebar">
+      <div className="adm-brand">
+        <div className="adm-brand-mark">摸</div>
+        <div>
+          <div className="adm-brand-title">管理后台</div>
+          <div className="adm-brand-sub">摸鱼社区</div>
+        </div>
       </div>
-      <nav style={{ flex: 1, padding: '8px 0' }}>
+      <nav className="adm-nav">
         {NAV.map(n => (
-          <div key={n.id} onClick={() => onNav(n.id)}
-            style={{
-              padding: '9px 16px', cursor: 'pointer', fontSize: 15,
-              color: page === n.id ? 'var(--accent)' : 'var(--ink-1)',
-              background: page === n.id ? 'var(--paper-2)' : 'transparent',
-              borderLeft: page === n.id ? '3px solid var(--accent)' : '3px solid transparent',
-            }}>{n.label}</div>
+          <div key={n.id} className={`adm-nav-item${page === n.id ? ' active' : ''}`} onClick={() => onNav(n.id)}>
+            <span className="adm-nav-icon">{n.icon}</span>{n.label}
+          </div>
         ))}
       </nav>
-      <div style={{ padding: 16, borderTop: '1px solid var(--paper-2)' }}>
-        <Btn small danger onClick={onLogout}>退出登录</Btn>
+      <div className="adm-sidebar-footer">
+        <div className="adm-avatar">{initial}</div>
+        <div className="adm-sidebar-footer-name" style={{ flex: 1 }}>{adminUser?.display_name}</div>
+        <button className="adm-logout-btn" title="退出登录" onClick={onLogout}>⎋</button>
       </div>
     </div>
   );
@@ -274,20 +305,19 @@ function AdminSidebar({ page, onNav, onLogout, adminUser }) {
 // ─── Dashboard ───────────────────────────────────────────────────
 function DashboardPage() {
   const { loading, data, error } = useAsync(() => api.get('/api/admin/stats'), []);
-  if (loading) return <Spinner />;
-  if (error) return <Err msg={error} />;
   return (
-    <div style={{ padding: 24 }}>
-      <h2 style={{ margin: '0 0 20px', fontSize: 18 }}>概览</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 16 }}>
-        <Card label="注册用户" value={data.total_users.toLocaleString()} />
-        <Card label="服务器" value={data.total_servers.toLocaleString()} />
-        <Card label="频道" value={data.total_channels.toLocaleString()} />
-        <Card label="消息数" value={data.total_messages.toLocaleString()} />
-        <Card label="今日新增" value={data.new_users_today.toLocaleString()} />
-        <Card label="待处理举报" value={data.pending_reports.toLocaleString()} />
-      </div>
-    </div>
+    <Page title="概览" subtitle="平台核心数据一览">
+      {loading ? <Spinner /> : error ? <Err msg={error} /> : (
+        <div className="adm-stat-grid">
+          <StatCard label="注册用户" value={data.total_users.toLocaleString()} />
+          <StatCard label="服务器" value={data.total_servers.toLocaleString()} />
+          <StatCard label="频道" value={data.total_channels.toLocaleString()} />
+          <StatCard label="消息数" value={data.total_messages.toLocaleString()} />
+          <StatCard label="今日新增" value={data.new_users_today.toLocaleString()} />
+          <StatCard label="待处理举报" value={data.pending_reports.toLocaleString()} />
+        </div>
+      )}
+    </Page>
   );
 }
 
@@ -298,16 +328,20 @@ function UsersPage({ onNav }) {
   const [page, setPage] = React.useState(0);
   const { loading, data, error } = useAsync(() => api.get(`/api/admin/users?q=${encodeURIComponent(search)}&limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`), [search, page]);
   const cols = [
-    { key: 'id', label: 'ID', render: r => <span style={{ color: 'var(--ink-2)', fontSize: 12 }}>{r.id}</span> },
-    { key: 'username', label: '用户名' },
-    { key: 'display_name', label: '显示名' },
-    { key: 'status', label: '在线', render: r => <Badge label={r.status} /> },
-    { key: 'flags', label: '标记', render: r => <span>{r.is_admin ? <Badge label="管理员" color="var(--accent-soft,#3d7)" /> : null}{r.is_banned ? <Badge label="封禁" color="#e06c7540" /> : null}</span> },
-    { key: 'created_at', label: '注册', render: r => fmtDate(r.created_at) },
+    { key: 'id', label: 'ID', render: r => <span style={{ color: 'var(--ink-2)', fontSize: 12.5 }}>{r.id}</span> },
+    { key: 'username', label: '用户名', render: r => <span style={{ color: 'var(--ink-2)' }}>@{r.username}</span> },
+    { key: 'display_name', label: '显示名', render: r => <span style={{ fontWeight: 600 }}>{r.display_name}</span> },
+    { key: 'status', label: '在线', render: r => <Badge label={r.status} tone={r.status === 'online' ? 'ok' : undefined} /> },
+    { key: 'flags', label: '标记', render: r => (
+      <span style={{ display: 'inline-flex', gap: 6 }}>
+        {r.is_admin ? <Badge label="管理员" tone="accent" /> : null}
+        {r.is_banned ? <Badge label="封禁" tone="danger" /> : null}
+      </span>
+    ) },
+    { key: 'created_at', label: '注册', render: r => <span style={{ color: 'var(--ink-2)' }}>{fmtDate(r.created_at)}</span> },
   ];
   return (
-    <div style={{ padding: 24 }}>
-      <h2 style={{ margin: '0 0 16px', fontSize: 18 }}>用户管理</h2>
+    <Page title="用户管理" subtitle="搜索、封禁、授权与移除用户">
       <SearchBar value={q} onChange={setQ} onSearch={v => { setSearch(v); setPage(0); }} placeholder="搜索用户名 / 显示名" />
       {loading ? <Spinner /> : error ? <Err msg={error} /> : (
         <>
@@ -315,7 +349,7 @@ function UsersPage({ onNav }) {
           <Pager page={page} setPage={setPage} count={(data || []).length} loading={loading} />
         </>
       )}
-    </div>
+    </Page>
   );
 }
 
@@ -323,47 +357,47 @@ function UserDetailPage({ userId, onBack }) {
   const [rev, setRev] = React.useState(0);
   const { loading, data: user, error } = useAsync(() => api.get(`/api/admin/users/${userId}`), [userId, rev]);
   const [banReason, setBanReason] = React.useState('');
-  const [msg, setMsg] = React.useState('');
+  const [flash, showOk, showErr] = useFlash();
 
-  async function act(fn, afterFn) {
-    try { await fn(); setMsg('操作成功'); if (afterFn) afterFn(); else setRev(r => r + 1); }
-    catch (e) { setMsg(e.message); }
+  async function act(fn) {
+    try { await fn(); showOk('操作成功'); setRev(r => r + 1); }
+    catch (e) { showErr(e); }
   }
 
-  if (loading) return <Spinner />;
-  if (error) return <Err msg={error} />;
+  if (loading) return <Page title="用户详情" back={onBack}><Spinner /></Page>;
+  if (error) return <Page title="用户详情" back={onBack}><Err msg={error} /></Page>;
   return (
-    <div style={{ padding: 24 }}>
-      <BackBtn onClick={onBack} />
-      <h2 style={{ margin: '0 0 20px' }}>{user.display_name} <span style={{ fontSize: 14, color: 'var(--ink-2)' }}>@{user.username}</span></h2>
-      <Flash msg={msg} />
-      <div style={{ display: 'inline-grid', gridTemplateColumns: 'auto auto', gap: 12, marginBottom: 24 }}>
-        <InfoRow label="ID" value={user.id} />
-        <InfoRow label="状态" value={user.status} />
-        <InfoRow label="管理员" value={user.is_admin ? '是' : '否'} />
-        <InfoRow label="封禁" value={user.is_banned ? `是：${user.banned_reason}` : '否'} />
-        <InfoRow label="注册时间" value={fmtTime(user.created_at)} />
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ display: 'flex', gap: 8 }}>
+    <Page title={user.display_name} subtitle={`@${user.username}`} back={onBack}>
+      <Flash flash={flash} />
+      <DetailGrid>
+        <DetailCell label="ID" value={user.id} />
+        <DetailCell label="状态" value={user.status} />
+        <DetailCell label="管理员" value={user.is_admin ? '是' : '否'} />
+        <DetailCell label="封禁" value={user.is_banned ? `是：${user.banned_reason}` : '否'} />
+        <DetailCell label="注册时间" value={fmtTime(user.created_at)} />
+      </DetailGrid>
+
+      <Panel title="账号操作" style={{ marginTop: 20, maxWidth: 640 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <Input value={banReason} onChange={e => setBanReason(e.target.value)} placeholder="封禁原因（必填）" />
-          <Btn danger onClick={() => { if (!banReason.trim()) { setMsg('请填写封禁原因'); return; } act(() => api.post(`/api/admin/users/${userId}/ban`, { reason: banReason })); }}>封禁</Btn>
+          <Btn danger onClick={() => { if (!banReason.trim()) { showErr('请填写封禁原因'); return; } act(() => api.post(`/api/admin/users/${userId}/ban`, { reason: banReason })); }}>封禁</Btn>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Btn onClick={() => act(() => api.post(`/api/admin/users/${userId}/unban`))}>解封</Btn>
-          <Btn onClick={() => act(() => api.patch(`/api/admin/users/${userId}/admin`, { is_admin: !user.is_admin }))}>
+          <Btn ghost onClick={() => act(() => api.post(`/api/admin/users/${userId}/unban`))}>解封</Btn>
+          <Btn ghost onClick={() => act(() => api.patch(`/api/admin/users/${userId}/admin`, { is_admin: !user.is_admin }))}>
             {user.is_admin ? '撤销管理员' : '提升为管理员'}
           </Btn>
         </div>
-        <div style={{ marginTop: 8, paddingTop: 16, borderTop: '1px solid var(--paper-2)' }}>
-          <Btn danger onClick={async () => {
-            if (!confirm(`确认永久删除用户「${user.username}」？\n此操作不可撤销：其消息、私信、好友关系将被永久删除，其创建的服务器将被删除。`)) return;
-            try { await api.del(`/api/admin/users/${userId}`); onBack(); }
-            catch (e) { setMsg(e.message); }
-          }}>永久删除用户</Btn>
-        </div>
-      </div>
-    </div>
+      </Panel>
+
+      <Panel title="危险操作" style={{ marginTop: 16, maxWidth: 640 }}>
+        <Btn danger onClick={async () => {
+          if (!confirm(`确认永久删除用户「${user.username}」？\n此操作不可撤销：其消息、私信、好友关系将被永久删除，其创建的服务器将被删除。`)) return;
+          try { await api.del(`/api/admin/users/${userId}`); onBack(); }
+          catch (e) { showErr(e); }
+        }}>永久删除用户</Btn>
+      </Panel>
+    </Page>
   );
 }
 
@@ -374,18 +408,17 @@ function ServersPage({ onNav }) {
   const [page, setPage] = React.useState(0);
   const { loading, data, error } = useAsync(() => api.get(`/api/admin/servers?q=${encodeURIComponent(search)}&limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`), [search, page]);
   const cols = [
-    { key: 'id', label: 'ID', render: r => <span style={{ color: 'var(--ink-2)', fontSize: 12 }}>{r.id}</span> },
-    { key: 'name', label: '名称' },
+    { key: 'id', label: 'ID', render: r => <span style={{ color: 'var(--ink-2)', fontSize: 12.5 }}>{r.id}</span> },
+    { key: 'name', label: '名称', render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
     { key: 'member_count', label: '成员数' },
     { key: 'join_policy', label: '加入策略', render: r => <Badge label={r.join_policy} /> },
-    { key: 'is_recommended', label: '推荐', render: r => r.is_recommended ? <Badge label="推荐" color="var(--accent-soft,#3d7)" /> : null },
-    { key: 'auto_join', label: '默认加入', render: r => r.auto_join ? <Badge label="是" color="var(--accent)" /> : <span style={{ color: 'var(--ink-2)' }}>否</span> },
+    { key: 'is_recommended', label: '推荐', render: r => r.is_recommended ? <Badge label="推荐" tone="accent" /> : <span style={{ color: 'var(--ink-2)' }}>—</span> },
+    { key: 'auto_join', label: '默认加入', render: r => r.auto_join ? <Badge label="是" tone="ok" /> : <span style={{ color: 'var(--ink-2)' }}>否</span> },
     { key: 'join_order', label: '排序', render: r => r.join_order === 999 || r.join_order == null ? <span style={{ color: 'var(--ink-2)' }}>—</span> : r.join_order },
-    { key: 'created_at', label: '创建', render: r => fmtDate(r.created_at) },
+    { key: 'created_at', label: '创建', render: r => <span style={{ color: 'var(--ink-2)' }}>{fmtDate(r.created_at)}</span> },
   ];
   return (
-    <div style={{ padding: 24 }}>
-      <h2 style={{ margin: '0 0 16px', fontSize: 18 }}>服务器管理</h2>
+    <Page title="服务器管理" subtitle="搜索、推荐设置与频道治理">
       <SearchBar value={q} onChange={setQ} onSearch={v => { setSearch(v); setPage(0); }} placeholder="搜索服务器名" />
       {loading ? <Spinner /> : error ? <Err msg={error} /> : (
         <>
@@ -393,7 +426,7 @@ function ServersPage({ onNav }) {
           <Pager page={page} setPage={setPage} count={(data || []).length} loading={loading} />
         </>
       )}
-    </div>
+    </Page>
   );
 }
 
@@ -401,54 +434,55 @@ function ServerDetailPage({ serverId, onBack }) {
   const [rev, setRev] = React.useState(0);
   const { loading, data: server, error } = useAsync(() => api.get(`/api/admin/servers/${serverId}`), [serverId, rev]);
   const { data: channels } = useAsync(() => api.get(`/api/admin/servers/${serverId}/channels`), [serverId, rev]);
-  const [msg, setMsg] = React.useState('');
+  const [flash, showOk, showErr] = useFlash();
 
   async function act(fn, afterFn) {
-    try { await fn(); setMsg('操作成功'); if (afterFn) afterFn(); else setRev(r => r + 1); }
-    catch (e) { setMsg(e.message); }
+    try { await fn(); showOk('操作成功'); if (afterFn) afterFn(); else setRev(r => r + 1); }
+    catch (e) { showErr(e); }
   }
 
-  if (loading) return <Spinner />;
-  if (error) return <Err msg={error} />;
+  if (loading) return <Page title="服务器详情" back={onBack}><Spinner /></Page>;
+  if (error) return <Page title="服务器详情" back={onBack}><Err msg={error} /></Page>;
   return (
-    <div style={{ padding: 24 }}>
-      <BackBtn onClick={onBack} />
-      <h2 style={{ margin: '0 0 20px' }}>{server.name}</h2>
-      <Flash msg={msg} />
-      <div style={{ display: 'inline-grid', gridTemplateColumns: 'auto auto', gap: 12, marginBottom: 20 }}>
-        <InfoRow label="成员数" value={server.member_count} />
-        <InfoRow label="加入策略" value={{ open: '自由加入', approval: '需要审核', closed: '禁止加入' }[server.join_policy] || server.join_policy} />
-        <InfoRow label="推荐" value={server.is_recommended ? '是' : '否'} />
-        <InfoRow label="创建时间" value={fmtTime(server.created_at)} />
-        <InfoRow label="创建人" value={server.owner_display_name ? `${server.owner_display_name}（@${server.owner_username}）` : `已删除用户（ID: ${server.owner_id}）`} />
-        <InfoRow label="管理员" value={server.mods && server.mods.length > 0 ? server.mods.join('、') : '无'} />
-        <InfoRow label="新用户默认加入" value={server.auto_join ? '是' : '否'} />
-        <InfoRow label="默认加入顺序" value={server.join_order === 999 ? '未设置' : server.join_order} />
-      </div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-        <Btn onClick={() => act(() => api.patch(`/api/admin/servers/${serverId}/recommended`))}>
-          {server.is_recommended ? '取消推荐' : '设为推荐'}
-        </Btn>
-        <Btn onClick={() => act(() => api.patch(`/api/admin/servers/${serverId}/admin-settings`, { auto_join: !server.auto_join }))}>
-          {server.auto_join ? '✓ 新用户默认加入（点击关闭）' : '设为新用户默认加入'}
-        </Btn>
-        <Btn danger onClick={() => { if (!confirm('确认强制删除该服务器？此操作不可撤销。')) return; act(() => api.del(`/api/admin/servers/${serverId}`), onBack); }}>
-          强制删除
-        </Btn>
-      </div>
-      <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center', marginBottom: 20 }}>
-        <span style={{ fontSize: 14, color: 'var(--ink-2)' }}>新用户加入顺序（数字越小越靠前）：</span>
-        <input type="number" defaultValue={server.join_order} id={`join-order-${serverId}`}
-          style={{ width: 80, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--paper-2)', background: 'var(--paper-0)', color: 'var(--ink-0)', fontSize: 15 }} />
-        <Btn small onClick={() => {
-          const val = parseInt(document.getElementById(`join-order-${serverId}`).value);
-          if (!isNaN(val)) act(() => api.patch(`/api/admin/servers/${serverId}/admin-settings`, { join_order: val }));
-        }}>保存</Btn>
-      </div>
-      <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>频道列表</h3>
+    <Page title={server.name} back={onBack}>
+      <Flash flash={flash} />
+      <DetailGrid>
+        <DetailCell label="成员数" value={server.member_count} />
+        <DetailCell label="加入策略" value={{ open: '自由加入', approval: '需要审核', closed: '禁止加入' }[server.join_policy] || server.join_policy} />
+        <DetailCell label="推荐" value={server.is_recommended ? '是' : '否'} />
+        <DetailCell label="创建时间" value={fmtTime(server.created_at)} />
+        <DetailCell label="创建人" value={server.owner_display_name ? `${server.owner_display_name}（@${server.owner_username}）` : `已删除用户（ID: ${server.owner_id}）`} />
+        <DetailCell label="管理员" value={server.mods && server.mods.length > 0 ? server.mods.join('、') : '无'} />
+        <DetailCell label="新用户默认加入" value={server.auto_join ? '是' : '否'} />
+        <DetailCell label="默认加入顺序" value={server.join_order === 999 ? '未设置' : server.join_order} />
+      </DetailGrid>
+
+      <Panel title="服务器设置" style={{ marginTop: 20 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+          <Btn ghost onClick={() => act(() => api.patch(`/api/admin/servers/${serverId}/recommended`))}>
+            {server.is_recommended ? '取消推荐' : '设为推荐'}
+          </Btn>
+          <Btn ghost active={server.auto_join} onClick={() => act(() => api.patch(`/api/admin/servers/${serverId}/admin-settings`, { auto_join: !server.auto_join }))}>
+            {server.auto_join ? '✓ 新用户默认加入' : '设为新用户默认加入'}
+          </Btn>
+          <Btn danger onClick={() => { if (!confirm('确认强制删除该服务器？此操作不可撤销。')) return; act(() => api.del(`/api/admin/servers/${serverId}`), onBack); }}>
+            强制删除
+          </Btn>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>新用户加入顺序（数字越小越靠前）：</span>
+          <input type="number" defaultValue={server.join_order} id={`join-order-${serverId}`} className="adm-input" style={{ width: 90 }} />
+          <Btn small onClick={() => {
+            const val = parseInt(document.getElementById(`join-order-${serverId}`).value);
+            if (!isNaN(val)) act(() => api.patch(`/api/admin/servers/${serverId}/admin-settings`, { join_order: val }));
+          }}>保存</Btn>
+        </div>
+      </Panel>
+
+      <div style={{ margin: '24px 0 12px', fontWeight: 700, fontSize: 15 }}>频道列表</div>
       <Table
         cols={[
-          { key: 'name', label: '频道名' },
+          { key: 'name', label: '频道名', render: r => <span style={{ fontWeight: 600 }}>#{r.name}</span> },
           { key: 'kind', label: '类型', render: r => <Badge label={r.kind} /> },
           { key: 'actions', label: '', render: r => (
             <Btn small danger onClick={e => { e.stopPropagation(); if (!confirm(`删除频道「${r.name}」？`)) return; act(() => api.del(`/api/admin/channels/${r.id}`)); }}>删除</Btn>
@@ -456,7 +490,7 @@ function ServerDetailPage({ serverId, onBack }) {
         ]}
         rows={channels || []}
       />
-    </div>
+    </Page>
   );
 }
 
@@ -468,29 +502,28 @@ function ReportsPage({ onNav }) {
     () => api.get(`/api/admin/reports?status_filter=${statusFilter}&limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`),
     [statusFilter, page]
   );
+  const statusTone = { pending: 'accent', resolved: 'ok', dismissed: 'danger' };
   const cols = [
     { key: 'id', label: 'ID' },
     { key: 'target_type', label: '类型', render: r => <Badge label={r.target_type} /> },
-    { key: 'reason', label: '原因', render: r => <span style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{r.reason}</span> },
-    { key: 'status', label: '状态', render: r => <Badge label={r.status} color={r.status === 'pending' ? 'var(--accent-soft,#3d7)' : undefined} /> },
-    { key: 'created_at', label: '时间', render: r => fmtDate(r.created_at) },
+    { key: 'reason', label: '原因', render: r => <span style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{r.reason}</span> },
+    { key: 'status', label: '状态', render: r => <Badge label={r.status} tone={statusTone[r.status]} /> },
+    { key: 'created_at', label: '时间', render: r => <span style={{ color: 'var(--ink-2)' }}>{fmtDate(r.created_at)}</span> },
   ];
   return (
-    <div style={{ padding: 24 }}>
-      <h2 style={{ margin: '0 0 16px', fontSize: 18 }}>举报队列</h2>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {[['pending', '待处理'], ['resolved', '已处理'], ['dismissed', '已驳回'], ['', '全部']].map(([s, label]) => (
-          <Btn key={s} small onClick={() => { setStatusFilter(s); setPage(0); }}
-            style={{ opacity: statusFilter === s ? 1 : 0.6 }}>{label}</Btn>
-        ))}
-      </div>
+    <Page title="举报队列" subtitle="处置被举报的消息 / 用户 / 服务器">
+      <FilterPills
+        options={[['pending', '待处理'], ['resolved', '已处理'], ['dismissed', '已驳回'], ['', '全部']]}
+        value={statusFilter}
+        onChange={v => { setStatusFilter(v); setPage(0); }}
+      />
       {loading ? <Spinner /> : error ? <Err msg={error} /> : (
         <>
           <Table cols={cols} rows={data || []} onRowClick={r => onNav('report-detail', { reportId: r.id })} />
           <Pager page={page} setPage={setPage} count={(data || []).length} loading={loading} />
         </>
       )}
-    </div>
+    </Page>
   );
 }
 
@@ -499,48 +532,47 @@ function ReportDetailPage({ reportId, onBack, onNav }) {
   const { loading, data: report, error } = useAsync(() => api.get(`/api/admin/reports/${reportId}`), [reportId, rev]);
   const [note, setNote] = React.useState('');
   const [banReason, setBanReason] = React.useState('');
-  const [msg, setMsg] = React.useState('');
+  const [flash, showOk, showErr] = useFlash();
   const [busy, setBusy] = React.useState(false);
 
   async function act(action) {
     setBusy(true);
-    try { await api.post(`/api/admin/reports/${reportId}/${action}`, { note }); setMsg('操作成功'); setRev(r => r + 1); }
-    catch (e) { setMsg(e.message); }
+    try { await api.post(`/api/admin/reports/${reportId}/${action}`, { note }); showOk('操作成功'); setRev(r => r + 1); }
+    catch (e) { showErr(e); }
     finally { setBusy(false); }
   }
 
   // 对被举报对象采取处置，成功后把该举报标记为已处理（闭环）
   async function takeAction(doIt, autoNote) {
-    setBusy(true); setMsg('');
+    setBusy(true);
     try {
       await doIt();
       await api.post(`/api/admin/reports/${reportId}/resolve`, { note: note || autoNote });
-      setMsg('已处置并标记为已处理');
+      showOk('已处置并标记为已处理');
       setRev(r => r + 1);
-    } catch (e) { setMsg(e.message); }
+    } catch (e) { showErr(e); }
     finally { setBusy(false); }
   }
 
-  if (loading) return <Spinner />;
-  if (error) return <Err msg={error} />;
+  if (loading) return <Page title="举报详情" back={onBack}><Spinner /></Page>;
+  if (error) return <Page title="举报详情" back={onBack}><Err msg={error} /></Page>;
   const t = report.target_type, tid = report.target_id;
+  const statusTone = { pending: 'accent', resolved: 'ok', dismissed: 'danger' };
   return (
-    <div style={{ padding: 24 }}>
-      <BackBtn onClick={onBack} />
-      <h2 style={{ margin: '0 0 20px' }}>举报详情 #{report.id}</h2>
-      <Flash msg={msg} />
-      <div style={{ display: 'inline-grid', gridTemplateColumns: 'auto auto', gap: 12, marginBottom: 20 }}>
-        <InfoRow label="举报类型" value={t} />
-        <InfoRow label="目标 ID" value={tid} />
-        <InfoRow label="状态" value={report.status} />
-        <InfoRow label="原因" value={report.reason} />
-        {report.content_snapshot && <InfoRow label="内容快照" value={report.content_snapshot} />}
-        {report.resolution_note && <InfoRow label="处理备注" value={report.resolution_note} />}
-      </div>
+    <Page title={`举报详情 #${report.id}`} back={onBack}>
+      <Flash flash={flash} />
+      <DetailGrid>
+        <DetailCell label="举报类型" value={<Badge label={t} />} />
+        <DetailCell label="目标 ID" value={tid} />
+        <DetailCell label="状态" value={<Badge label={report.status} tone={statusTone[report.status]} />} />
+        <DetailCell label="原因" value={report.reason} />
+        {report.content_snapshot && <DetailCell label="内容快照" value={report.content_snapshot} />}
+        {report.resolution_note && <DetailCell label="处理备注" value={report.resolution_note} />}
+      </DetailGrid>
+
       {report.status === 'pending' && (
         <>
-          <div style={{ background: 'var(--paper-1)', border: '1px solid var(--paper-2)', borderRadius: 8, padding: 16, marginBottom: 16 }}>
-            <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>处置被举报对象</div>
+          <Panel title="处置被举报对象" style={{ marginTop: 20, maxWidth: 640 }}>
             {t === 'message' && (
               <Btn danger disabled={busy} onClick={() => { if (!confirm('删除这条被举报的消息？')) return; takeAction(() => api.del(`/api/messages/${tid}`), '已删除被举报消息'); }}>
                 删除该消息并标记已处理
@@ -550,28 +582,28 @@ function ReportDetailPage({ reportId, onBack, onNav }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <Input value={banReason} onChange={e => setBanReason(e.target.value)} placeholder="封禁原因（必填）" />
-                  <Btn danger disabled={busy} onClick={() => { if (!banReason.trim()) { setMsg('请填写封禁原因'); return; } if (!confirm('封禁被举报用户？')) return; takeAction(() => api.post(`/api/admin/users/${tid}/ban`, { reason: banReason }), '已封禁被举报用户'); }}>封禁该用户并标记已处理</Btn>
+                  <Btn danger disabled={busy} onClick={() => { if (!banReason.trim()) { showErr('请填写封禁原因'); return; } if (!confirm('封禁被举报用户？')) return; takeAction(() => api.post(`/api/admin/users/${tid}/ban`, { reason: banReason }), '已封禁被举报用户'); }}>封禁该用户并标记已处理</Btn>
                 </div>
-                <div><Btn small onClick={() => onNav && onNav('user-detail', { userId: tid })}>查看该用户 →</Btn></div>
+                <div><Btn small ghost onClick={() => onNav && onNav('user-detail', { userId: tid })}>查看该用户 →</Btn></div>
               </div>
             )}
             {t === 'server' && (
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <Btn danger disabled={busy} onClick={() => { if (!confirm('强制删除被举报服务器？不可撤销。')) return; takeAction(() => api.del(`/api/admin/servers/${tid}`), '已删除被举报服务器'); }}>删除该服务器并标记已处理</Btn>
-                <Btn small onClick={() => onNav && onNav('server-detail', { serverId: tid })}>查看该服务器 →</Btn>
+                <Btn small ghost onClick={() => onNav && onNav('server-detail', { serverId: tid })}>查看该服务器 →</Btn>
               </div>
             )}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <Input value={note} onChange={e => setNote(e.target.value)} placeholder="处理备注（可选）" />
+          </Panel>
+          <Panel title="其他处理" style={{ marginTop: 16, maxWidth: 640 }}>
+            <Input value={note} onChange={e => setNote(e.target.value)} placeholder="处理备注（可选）" style={{ marginBottom: 10, display: 'block', width: '100%' }} />
             <div style={{ display: 'flex', gap: 8 }}>
-              <Btn disabled={busy} onClick={() => act('resolve')}>仅标记已处理</Btn>
+              <Btn ghost disabled={busy} onClick={() => act('resolve')}>仅标记已处理</Btn>
               <Btn danger disabled={busy} onClick={() => act('dismiss')}>驳回举报</Btn>
             </div>
-          </div>
+          </Panel>
         </>
       )}
-    </div>
+    </Page>
   );
 }
 
@@ -579,7 +611,7 @@ function ReportDetailPage({ reportId, onBack, onNav }) {
 function InvitesPage() {
   const [serverId, setServerId] = React.useState('');
   const [search, setSearch] = React.useState('');
-  const [msg, setMsg] = React.useState('');
+  const [flash, showOk, showErr] = useFlash();
   const [rev, setRev] = React.useState(0);
   const [page, setPage] = React.useState(0);
   const url = `/api/admin/invites?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}${search ? `&server_id=${search}` : ''}`;
@@ -587,12 +619,12 @@ function InvitesPage() {
 
   async function doRevoke(code) {
     if (!confirm(`撤销邀请码 ${code}？`)) return;
-    try { await api.del(`/api/admin/invites/${code}`); setMsg(`已撤销 ${code}`); setRev(r => r + 1); }
-    catch (e) { setMsg(e.message); }
+    try { await api.del(`/api/admin/invites/${code}`); showOk(`已撤销 ${code}`); setRev(r => r + 1); }
+    catch (e) { showErr(e); }
   }
 
   const cols = [
-    { key: 'code', label: '邀请码' },
+    { key: 'code', label: '邀请码', render: r => <span style={{ fontFamily: 'var(--ff-mono, monospace)' }}>{r.code}</span> },
     { key: 'server_id', label: '服务器 ID' },
     { key: 'uses', label: '已用' },
     { key: 'max_uses', label: '上限', render: r => r.max_uses ?? '无限' },
@@ -600,9 +632,8 @@ function InvitesPage() {
     { key: 'actions', label: '', render: r => <Btn small danger onClick={e => { e.stopPropagation(); doRevoke(r.code); }}>撤销</Btn> },
   ];
   return (
-    <div style={{ padding: 24 }}>
-      <h2 style={{ margin: '0 0 16px', fontSize: 18 }}>邀请码管理</h2>
-      <Flash msg={msg} />
+    <Page title="邀请码管理" subtitle="按服务器筛选并撤销邀请码">
+      <Flash flash={flash} />
       <SearchBar value={serverId} onChange={setServerId} onSearch={v => { setSearch(v); setPage(0); }} placeholder="按服务器 ID 筛选（留空显示全部）" />
       {loading ? <Spinner /> : error ? <Err msg={error} /> : (
         <>
@@ -610,7 +641,7 @@ function InvitesPage() {
           <Pager page={page} setPage={setPage} count={(data || []).length} loading={loading} />
         </>
       )}
-    </div>
+    </Page>
   );
 }
 
@@ -625,13 +656,12 @@ function JoinRequestsPage() {
     { key: 'id', label: 'ID' },
     { key: 'server_id', label: '服务器 ID' },
     { key: 'user_id', label: '用户 ID' },
-    { key: 'status', label: '状态', render: r => <Badge label={r.status} /> },
+    { key: 'status', label: '状态', render: r => <Badge label={r.status} tone={r.status === 'pending' ? 'accent' : r.status === 'approved' ? 'ok' : undefined} /> },
     { key: 'note', label: '申请理由', render: r => r.note || '-' },
-    { key: 'created_at', label: '时间', render: r => fmtDate(r.created_at) },
+    { key: 'created_at', label: '时间', render: r => <span style={{ color: 'var(--ink-2)' }}>{fmtDate(r.created_at)}</span> },
   ];
   return (
-    <div style={{ padding: 24 }}>
-      <h2 style={{ margin: '0 0 16px', fontSize: 18 }}>加入申请</h2>
+    <Page title="加入申请" subtitle="查看各服务器的加入审核记录">
       <SearchBar value={serverId} onChange={setServerId} onSearch={v => { setSearch(v); setPage(0); }} placeholder="按服务器 ID 筛选（留空显示全部）" />
       {loading ? <Spinner /> : error ? <Err msg={error} /> : (
         <>
@@ -639,7 +669,7 @@ function JoinRequestsPage() {
           <Pager page={page} setPage={setPage} count={(data || []).length} loading={loading} />
         </>
       )}
-    </div>
+    </Page>
   );
 }
 
@@ -652,30 +682,31 @@ function AuditLogPage() {
   const url = `/api/admin/audit-logs?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}${action ? `&action=${action}` : ''}`;
   const { loading, data, error } = useAsync(() => api.get(url), [action, page]);
   const cols = [
-    { key: 'id', label: 'ID', render: r => <span style={{ color: 'var(--ink-2)', fontSize: 12 }}>{r.id}</span> },
+    { key: 'id', label: 'ID', render: r => <span style={{ color: 'var(--ink-2)', fontSize: 12.5 }}>{r.id}</span> },
     { key: 'admin_id', label: '管理员 ID' },
     { key: 'action', label: '操作', render: r => <Badge label={r.action} /> },
     { key: 'target_type', label: '对象类型' },
     { key: 'target_id', label: '对象 ID' },
-    { key: 'created_at', label: '时间', render: r => fmtTime(r.created_at) },
+    { key: 'created_at', label: '时间', render: r => <span style={{ color: 'var(--ink-2)' }}>{fmtTime(r.created_at)}</span> },
   ];
   return (
-    <div style={{ padding: 24 }}>
-      <h2 style={{ margin: '0 0 16px', fontSize: 18 }}>操作日志</h2>
-      <div style={{ marginBottom: 16 }}>
-        <select value={action} onChange={e => { setAction(e.target.value); setPage(0); }}
-          style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid var(--paper-2)', background: 'var(--paper-0)', color: 'var(--ink-0)', fontSize: 14 }}>
+    <Page
+      title="操作日志"
+      subtitle="所有管理员的敏感操作审计记录"
+      actions={
+        <select value={action} onChange={e => { setAction(e.target.value); setPage(0); }} className="adm-select" style={{ width: 220 }}>
           <option value="">全部操作</option>
           {AUDIT_ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
         </select>
-      </div>
+      }
+    >
       {loading ? <Spinner /> : error ? <Err msg={error} /> : (
         <>
           <Table cols={cols} rows={data || []} />
           <Pager page={page} setPage={setPage} count={(data || []).length} loading={loading} />
         </>
       )}
-    </div>
+    </Page>
   );
 }
 
@@ -705,9 +736,9 @@ function AdminShell({ adminUser }) {
   }
 
   return (
-    <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden', background: 'var(--paper-0)', color: 'var(--ink-0)' }}>
+    <div className="adm-shell">
       <AdminSidebar page={nav.page} onNav={goTo} onLogout={logout} adminUser={adminUser} />
-      <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>{renderPage()}</main>
+      <main className="adm-main">{renderPage()}</main>
     </div>
   );
 }
@@ -721,10 +752,15 @@ const LLM_PRESETS = [
   { label: '自定义', base_url: '', model: '' },
 ];
 
-const sectionBox = { background: 'var(--paper-1)', borderRadius: 8, padding: '16px 20px', border: '1px solid var(--paper-2)', marginBottom: 14 };
-const fldLabel = { display: 'block', fontSize: 13, color: 'var(--ink-2)', marginBottom: 4 };
-const fldRow = { marginBottom: 12 };
-const fullInput = { width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid var(--paper-2)', background: 'var(--paper-0)', color: 'var(--ink-0)', fontSize: 15, boxSizing: 'border-box' };
+function PresetPicker({ preset, onPick }) {
+  return (
+    <div className="adm-chip-row">
+      {LLM_PRESETS.map((p, i) => (
+        <div key={i} className={`adm-chip${preset === i ? ' on' : ''}`} onClick={() => onPick(i)}>{p.label}</div>
+      ))}
+    </div>
+  );
+}
 
 function BotCreateModal({ onClose, onCreated }) {
   const [form, setForm] = React.useState({
@@ -752,35 +788,24 @@ function BotCreateModal({ onClose, onCreated }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
-         onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: 'var(--paper-1)', borderRadius: 8, padding: 24, width: 480, maxHeight: '90vh', overflowY: 'auto' }}>
-        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>新建机器人</div>
+    <div className="adm-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="adm-modal" style={{ width: 480, maxHeight: '90vh', overflowY: 'auto' }}>
+        <div className="adm-modal-title">新建机器人</div>
         <form onSubmit={submit}>
-          <div style={fldRow}><label style={fldLabel}>备注名</label><input style={fullInput} value={form.name} onChange={set('name')} placeholder="如：摸鱼助手" /></div>
-          <div style={fldRow}><label style={fldLabel}>用户名（英文+数字+下划线）</label><input style={fullInput} value={form.username} onChange={set('username')} placeholder="moyu_bot" /></div>
-          <div style={fldRow}><label style={fldLabel}>密码</label><input style={fullInput} type="password" value={form.password} onChange={set('password')} placeholder="至少6位" /></div>
-          <div style={fldRow}><label style={fldLabel}>显示名（聊天中显示）</label><input style={fullInput} value={form.display_name} onChange={set('display_name')} placeholder="摸鱼助手" /></div>
-          <div style={fldRow}>
-            <label style={fldLabel}>大模型预设</label>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {LLM_PRESETS.map((p, i) => (
-                <button type="button" key={i} onClick={() => applyPreset(i)}
-                  style={{ padding: '4px 10px', fontSize: 13, borderRadius: 6, border: 'none', cursor: 'pointer',
-                    background: preset === i ? 'var(--accent)' : 'var(--paper-2)',
-                    color: preset === i ? 'var(--accent-ink, #fff)' : 'var(--ink-1)' }}>{p.label}</button>
-              ))}
-            </div>
-          </div>
-          <div style={fldRow}><label style={fldLabel}>API Key</label><input style={fullInput} value={form.llm_api_key} onChange={set('llm_api_key')} placeholder="sk-..." /></div>
-          <div style={fldRow}><label style={fldLabel}>Base URL</label><input style={fullInput} value={form.llm_base_url} onChange={set('llm_base_url')} /></div>
-          <div style={fldRow}><label style={fldLabel}>模型名</label><input style={fullInput} value={form.llm_model} onChange={set('llm_model')} /></div>
-          <div style={fldRow}><label style={fldLabel}>System Prompt</label>
-            <textarea style={{ ...fullInput, resize: 'vertical' }} value={form.system_prompt} onChange={set('system_prompt')} rows={3} />
-          </div>
+          <Field label="备注名"><input className="adm-input" value={form.name} onChange={set('name')} placeholder="如：摸鱼助手" /></Field>
+          <Field label="用户名（英文+数字+下划线）"><input className="adm-input" value={form.username} onChange={set('username')} placeholder="moyu_bot" /></Field>
+          <Field label="密码"><input className="adm-input" type="password" value={form.password} onChange={set('password')} placeholder="至少6位" /></Field>
+          <Field label="显示名（聊天中显示）"><input className="adm-input" value={form.display_name} onChange={set('display_name')} placeholder="摸鱼助手" /></Field>
+          <Field label="大模型预设"><PresetPicker preset={preset} onPick={applyPreset} /></Field>
+          <Field label="API Key"><input className="adm-input" value={form.llm_api_key} onChange={set('llm_api_key')} placeholder="sk-..." /></Field>
+          <Field label="Base URL"><input className="adm-input" value={form.llm_base_url} onChange={set('llm_base_url')} /></Field>
+          <Field label="模型名"><input className="adm-input" value={form.llm_model} onChange={set('llm_model')} /></Field>
+          <Field label="System Prompt">
+            <textarea className="adm-textarea" value={form.system_prompt} onChange={set('system_prompt')} rows={3} />
+          </Field>
           {err && <Err msg={err} />}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-            <Btn onClick={onClose}>取消</Btn>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 18 }}>
+            <Btn ghost onClick={onClose}>取消</Btn>
             <Btn type="submit" disabled={saving}>{saving ? '创建中…' : '创建'}</Btn>
           </div>
         </form>
@@ -794,61 +819,36 @@ function BotsPage({ onNav }) {
   const { loading, data: bots, error } = useAsync(() => api.get('/api/admin/bots'), [rev]);
   const [showCreate, setShowCreate] = React.useState(false);
   const [toggling, setToggling] = React.useState({});
-  const [msg, setMsg] = React.useState('');
+  const [flash, showOk, showErr] = useFlash();
 
   async function toggle(bot) {
     setToggling(t => ({ ...t, [bot.id]: true }));
     try {
       await api.post(`/api/admin/bots/${bot.id}/${bot.is_active ? 'stop' : 'start'}`);
       setRev(r => r + 1);
-    } catch (e) { setMsg(e.message); }
+    } catch (e) { showErr(e); }
     finally { setToggling(t => ({ ...t, [bot.id]: false })); }
   }
 
+  const cols = [
+    { key: 'name', label: '名称', render: r => <span style={{ cursor: 'pointer', color: 'var(--accent)', fontWeight: 700 }} onClick={() => onNav('bot-detail', { botId: r.id })}>{r.name}</span> },
+    { key: 'username', label: '用户名', render: r => <span style={{ color: 'var(--ink-2)' }}>@{r.username}</span> },
+    { key: 'display_name', label: '显示名' },
+    { key: 'llm_model', label: '模型', render: r => <span style={{ color: 'var(--ink-2)' }}>{r.llm_model}</span> },
+    { key: 'is_active', label: '状态', render: r => <Badge label={r.is_active ? '运行中' : '已停止'} tone={r.is_active ? 'ok' : undefined} /> },
+    { key: 'actions', label: '', render: r => (
+      <Btn small danger={r.is_active} disabled={toggling[r.id]} onClick={e => { e.stopPropagation(); toggle(r); }}>
+        {toggling[r.id] ? '…' : r.is_active ? '停止' : '启动'}
+      </Btn>
+    ) },
+  ];
+
   return (
-    <div style={{ padding: 32 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div style={{ fontSize: 22, fontWeight: 700 }}>机器人管理</div>
-        <Btn onClick={() => setShowCreate(true)}>+ 新建机器人</Btn>
-      </div>
-      <Flash msg={msg} />
-      {loading && <Spinner />}
-      {error && <Err msg={error} />}
-      {bots && (
-        <div style={{ background: 'var(--paper-1)', borderRadius: 8, border: '1px solid var(--paper-2)', overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--paper-2)', color: 'var(--ink-2)', fontSize: 13 }}>
-                {['名称','用户名','显示名','模型','状态','操作'].map(h => (
-                  <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {bots.length === 0 && (
-                <tr><td colSpan={6} style={{ padding: '24px 12px', textAlign: 'center', color: 'var(--ink-2)' }}>暂无机器人</td></tr>
-              )}
-              {bots.map(bot => (
-                <tr key={bot.id} style={{ borderBottom: '1px solid var(--paper-2)' }}>
-                  <td style={{ padding: '10px 12px' }}>
-                    <span style={{ cursor: 'pointer', color: 'var(--accent)', fontWeight: 600 }} onClick={() => onNav('bot-detail', { botId: bot.id })}>{bot.name}</span>
-                  </td>
-                  <td style={{ padding: '10px 12px', color: 'var(--ink-2)', fontSize: 13 }}>@{bot.username}</td>
-                  <td style={{ padding: '10px 12px' }}>{bot.display_name}</td>
-                  <td style={{ padding: '10px 12px', fontSize: 13, color: 'var(--ink-2)' }}>{bot.llm_model}</td>
-                  <td style={{ padding: '10px 12px' }}>
-                    <Badge label={bot.is_active ? '运行中' : '已停止'} color={bot.is_active ? '#3a9d5c' : ''} />
-                  </td>
-                  <td style={{ padding: '10px 12px' }}>
-                    <Btn small danger={bot.is_active} disabled={toggling[bot.id]} onClick={() => toggle(bot)}>
-                      {toggling[bot.id] ? '…' : bot.is_active ? '停止' : '启动'}
-                    </Btn>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+    <Page title="机器人管理" subtitle="配置 AI 机器人并管理其运行状态"
+      actions={<Btn onClick={() => setShowCreate(true)}>+ 新建机器人</Btn>}>
+      <Flash flash={flash} />
+      {loading ? <Spinner /> : error ? <Err msg={error} /> : (
+        <Table cols={cols} rows={bots || []} />
       )}
       {showCreate && (
         <BotCreateModal
@@ -856,7 +856,7 @@ function BotsPage({ onNav }) {
           onCreated={() => { setShowCreate(false); setRev(r => r + 1); }}
         />
       )}
-    </div>
+    </Page>
   );
 }
 
@@ -866,7 +866,7 @@ function BotDetailPage({ botId, onBack }) {
   const { data: allChannels } = useAsync(() => api.get(`/api/admin/bots/${botId}/available-channels`), [botId]);
   const [form, setForm] = React.useState(null);
   const [preset, setPreset] = React.useState(0);
-  const [msg, setMsg] = React.useState('');
+  const [flash, showOk, showErr] = useFlash();
   const [saving, setSaving] = React.useState(false);
   const [toggling, setToggling] = React.useState(false);
 
@@ -888,31 +888,31 @@ function BotDetailPage({ botId, onBack }) {
   }
 
   async function save() {
-    setSaving(true); setMsg('');
+    setSaving(true);
     try {
       const patch = { ...form };
       if (!patch.password) delete patch.password;
       if (!patch.llm_api_key) delete patch.llm_api_key;
       await api.patch(`/api/admin/bots/${botId}`, patch);
-      setMsg('保存成功');
+      showOk('保存成功');
       setRev(r => r + 1);
-    } catch (e) { setMsg(e.message); }
+    } catch (e) { showErr(e); }
     finally { setSaving(false); }
   }
 
   async function toggleActive() {
-    setToggling(true); setMsg('');
+    setToggling(true);
     try {
       await api.post(`/api/admin/bots/${botId}/${bot.is_active ? 'stop' : 'start'}`);
       setRev(r => r + 1);
-    } catch (e) { setMsg(e.message); }
+    } catch (e) { showErr(e); }
     finally { setToggling(false); }
   }
 
   async function deleteBot() {
     if (!confirm(`确认删除机器人「${bot.name}」？此操作将同时删除其用户账号。`)) return;
     try { await api.del(`/api/admin/bots/${botId}`); onBack(); }
-    catch (e) { setMsg(e.message); }
+    catch (e) { showErr(e); }
   }
 
   function toggleChannel(chId) {
@@ -922,79 +922,61 @@ function BotDetailPage({ botId, onBack }) {
     });
   }
 
-  if (loading) return <div style={{ padding: 32 }}><Spinner /></div>;
-  if (error) return <div style={{ padding: 32 }}><Err msg={error} /></div>;
+  if (loading) return <Page title="机器人详情" back={onBack}><Spinner /></Page>;
+  if (error) return <Page title="机器人详情" back={onBack}><Err msg={error} /></Page>;
   if (!form) return null;
 
   return (
-    <div style={{ padding: 32, maxWidth: 720 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-        <BackBtn onClick={onBack} />
-        <div style={{ fontSize: 20, fontWeight: 700 }}>{bot.name}</div>
-        <Badge label={bot.is_active ? '运行中' : '已停止'} color={bot.is_active ? '#3a9d5c' : ''} />
-        <div style={{ marginLeft: 'auto' }}>
+    <Page
+      title={bot.name}
+      back={onBack}
+      actions={
+        <>
+          <Badge label={bot.is_active ? '运行中' : '已停止'} tone={bot.is_active ? 'ok' : undefined} />
           <Btn danger={bot.is_active} disabled={toggling} onClick={toggleActive}>
             {toggling ? '…' : bot.is_active ? '停止服务' : '启动服务'}
           </Btn>
-        </div>
-      </div>
-      <Flash msg={msg} />
+        </>
+      }
+    >
+      <Flash flash={flash} />
+      <div style={{ maxWidth: 680 }}>
+        <Panel title="基本信息">
+          <Field label="备注名"><input className="adm-input" value={form.name} onChange={set('name')} /></Field>
+          <div style={{ fontSize: 13.5, color: 'var(--ink-2)', marginBottom: 13 }}>用户名：@{bot.username}</div>
+          <Field label="显示名"><input className="adm-input" value={form.display_name} onChange={set('display_name')} /></Field>
+          <Field label="修改密码（留空则不变）"><input className="adm-input" type="password" value={form.password} onChange={set('password')} placeholder="留空保持原密码" /></Field>
+        </Panel>
 
-      <div style={sectionBox}>
-        <div style={{ fontWeight: 600, marginBottom: 12 }}>基本信息</div>
-        <div style={fldRow}><label style={fldLabel}>备注名</label><input style={fullInput} value={form.name} onChange={set('name')} /></div>
-        <div style={{ ...fldRow, fontSize: 14, color: 'var(--ink-2)' }}>用户名：@{bot.username}</div>
-        <div style={fldRow}><label style={fldLabel}>显示名</label><input style={fullInput} value={form.display_name} onChange={set('display_name')} /></div>
-        <div style={fldRow}><label style={fldLabel}>修改密码（留空则不变）</label><input style={fullInput} type="password" value={form.password} onChange={set('password')} placeholder="留空保持原密码" /></div>
-      </div>
+        <Panel title="大模型配置">
+          <Field label="预设"><PresetPicker preset={preset} onPick={applyPreset} /></Field>
+          <Field label="API Key（留空则不修改）"><input className="adm-input" value={form.llm_api_key} onChange={set('llm_api_key')} placeholder="留空保持原 key" /></Field>
+          <Field label="Base URL"><input className="adm-input" value={form.llm_base_url} onChange={set('llm_base_url')} /></Field>
+          <Field label="模型名"><input className="adm-input" value={form.llm_model} onChange={set('llm_model')} /></Field>
+          <Field label="System Prompt">
+            <textarea className="adm-textarea" value={form.system_prompt} onChange={set('system_prompt')} rows={3} />
+          </Field>
+        </Panel>
 
-      <div style={sectionBox}>
-        <div style={{ fontWeight: 600, marginBottom: 12 }}>大模型配置</div>
-        <div style={fldRow}>
-          <label style={fldLabel}>预设</label>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {LLM_PRESETS.map((p, i) => (
-              <button type="button" key={i} onClick={() => applyPreset(i)}
-                style={{ padding: '4px 10px', fontSize: 13, borderRadius: 6, border: 'none', cursor: 'pointer',
-                  background: preset === i ? 'var(--accent)' : 'var(--paper-2)',
-                  color: preset === i ? 'var(--accent-ink, #fff)' : 'var(--ink-1)' }}>{p.label}</button>
-            ))}
-          </div>
-        </div>
-        <div style={fldRow}><label style={fldLabel}>API Key（留空则不修改）</label><input style={fullInput} value={form.llm_api_key} onChange={set('llm_api_key')} placeholder="留空保持原 key" /></div>
-        <div style={fldRow}><label style={fldLabel}>Base URL</label><input style={fullInput} value={form.llm_base_url} onChange={set('llm_base_url')} /></div>
-        <div style={fldRow}><label style={fldLabel}>模型名</label><input style={fullInput} value={form.llm_model} onChange={set('llm_model')} /></div>
-        <div style={fldRow}><label style={fldLabel}>System Prompt</label>
-          <textarea style={{ ...fullInput, resize: 'vertical' }} value={form.system_prompt} onChange={set('system_prompt')} rows={3} />
-        </div>
-      </div>
-
-      <div style={sectionBox}>
-        <div style={{ fontWeight: 600, marginBottom: 4 }}>监听频道</div>
-        <div style={{ fontSize: 13, color: 'var(--ink-2)', marginBottom: 12 }}>留空则自动监听管理员服务器所有文字频道</div>
-        {allChannels && allChannels.map(srv => (
-          <div key={srv.server_id} style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-1)', marginBottom: 4 }}>{srv.server_name}</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {srv.channels.map(ch => {
-                const selected = form.channel_ids.includes(ch.id);
-                return (
-                  <div key={ch.id} onClick={() => toggleChannel(ch.id)}
-                    style={{ padding: '3px 10px', borderRadius: 4, fontSize: 13, cursor: 'pointer',
-                      background: selected ? 'var(--accent)' : 'var(--paper-2)',
-                      color: selected ? 'var(--accent-ink, #fff)' : 'var(--ink-1)' }}>#{ch.name}</div>
-                );
-              })}
+        <Panel title="监听频道" hint="留空则自动监听管理员服务器所有文字频道">
+          {allChannels && allChannels.map(srv => (
+            <div key={srv.server_id} style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink-1)', marginBottom: 6 }}>{srv.server_name}</div>
+              <div className="adm-chip-row">
+                {srv.channels.map(ch => (
+                  <div key={ch.id} className={`adm-chip${form.channel_ids.includes(ch.id) ? ' on' : ''}`} onClick={() => toggleChannel(ch.id)}>#{ch.name}</div>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </Panel>
 
-      <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between' }}>
-        <Btn danger onClick={deleteBot}>删除机器人</Btn>
-        <Btn disabled={saving} onClick={save}>{saving ? '保存中…' : '保存更改'}</Btn>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', marginTop: 20 }}>
+          <Btn danger onClick={deleteBot}>删除机器人</Btn>
+          <Btn disabled={saving} onClick={save}>{saving ? '保存中…' : '保存更改'}</Btn>
+        </div>
       </div>
-    </div>
+    </Page>
   );
 }
 
@@ -1021,7 +1003,7 @@ function AdminApp() {
   }
 
   return (
-    <div className="app theme-forest density-default" style={{ width: '100vw', height: '100vh', overflow: 'hidden', fontSize: 17 }}>
+    <div className="app theme-forest density-default" style={{ width: '100vw', height: '100vh', overflow: 'hidden', fontSize: 15 }}>
       {adminUser ? <AdminShell adminUser={adminUser} /> : <AdminLogin onLogin={setAdminUser} />}
     </div>
   );
