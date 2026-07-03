@@ -90,7 +90,15 @@
 
   async function parseResponse(response) {
     const text = await response.text();
-    const data = text ? JSON.parse(text) : null;
+    let data = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // 非 JSON 响应（如服务端未捕获异常返回的纯文本 500 页面），不让原始报文泄漏给用户
+        data = null;
+      }
+    }
     if (!response.ok) {
       const message = data?.detail || '请求失败，请稍后重试';
       const error = new Error(Array.isArray(message) ? message.map(item => item.msg).join('；') : message);

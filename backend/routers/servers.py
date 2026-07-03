@@ -521,6 +521,11 @@ def approve_join_request(
     )
     if existing_member is None:
         db.add(ServerMember(server_id=server_id, user_id=join_request.user_id, role="member"))
+        try:
+            db.commit()
+        except IntegrityError:
+            # 已存在成员记录（并发审核或用户已通过其他途径加入），忽略即可
+            db.rollback()
 
     join_request.status = "approved"
     join_request.decided_by = current_user.id
