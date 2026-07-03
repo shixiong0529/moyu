@@ -24,9 +24,16 @@ function renderMessageHtml(content) {
   return withMentions.replace(/\n/g, '<br/>');
 }
 
+const IMAGE_LINK_RE = /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)|\/uploads\/\S+\.(?:jpg|jpeg|png|gif|webp)/gi;
+
 function getImageLinks(content) {
-  const matches = String(content || '').match(/https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)|\/uploads\/\S+\.(?:jpg|jpeg|png|gif|webp)/gi);
+  const matches = String(content || '').match(IMAGE_LINK_RE);
   return matches || [];
+}
+
+// 图片链接已渲染为预览图，正文里不再显示原始地址；剥离后如果没有剩余文字，正文整行隐藏
+function stripImageLinks(content) {
+  return String(content || '').replace(IMAGE_LINK_RE, '').replace(/[ \t]{2,}/g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function getInviteLink(content) {
@@ -87,8 +94,9 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
   );
   const canPin = !msg.isDeleted && ['founder', 'mod'].includes(currentRole);
   const content = msg.content || msg.lines?.join('\n') || '';
-  const html = useMemoChat(() => renderMessageHtml(content), [content]);
   const imageLinks = useMemoChat(() => getImageLinks(content), [content]);
+  const displayText = useMemoChat(() => (imageLinks.length > 0 ? stripImageLinks(content) : content), [content, imageLinks]);
+  const html = useMemoChat(() => renderMessageHtml(displayText), [displayText]);
   const inviteLink = useMemoChat(() => getInviteLink(content), [content]);
 
   useEffectChat(function syncEditValue() {
@@ -152,7 +160,7 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
           />
         ) : (
           <>
-            <div className="msg-content" dangerouslySetInnerHTML={{ __html: html }} />
+            {displayText && <div className="msg-content" dangerouslySetInnerHTML={{ __html: html }} />}
             {imageLinks.length > 0 && (
               <div className="image-previews">
                 {imageLinks.map(link => (
