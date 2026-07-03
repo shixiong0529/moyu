@@ -494,40 +494,82 @@ function ReportsPage({ onNav }) {
   );
 }
 
-function ReportDetailPage({ reportId, onBack }) {
+function ReportDetailPage({ reportId, onBack, onNav }) {
   const [rev, setRev] = React.useState(0);
   const { loading, data: report, error } = useAsync(() => api.get(`/api/admin/reports/${reportId}`), [reportId, rev]);
   const [note, setNote] = React.useState('');
+  const [banReason, setBanReason] = React.useState('');
   const [msg, setMsg] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
 
   async function act(action) {
+    setBusy(true);
     try { await api.post(`/api/admin/reports/${reportId}/${action}`, { note }); setMsg('操作成功'); setRev(r => r + 1); }
     catch (e) { setMsg(e.message); }
+    finally { setBusy(false); }
+  }
+
+  // 对被举报对象采取处置，成功后把该举报标记为已处理（闭环）
+  async function takeAction(doIt, autoNote) {
+    setBusy(true); setMsg('');
+    try {
+      await doIt();
+      await api.post(`/api/admin/reports/${reportId}/resolve`, { note: note || autoNote });
+      setMsg('已处置并标记为已处理');
+      setRev(r => r + 1);
+    } catch (e) { setMsg(e.message); }
+    finally { setBusy(false); }
   }
 
   if (loading) return <Spinner />;
   if (error) return <Err msg={error} />;
+  const t = report.target_type, tid = report.target_id;
   return (
     <div style={{ padding: 24 }}>
       <BackBtn onClick={onBack} />
       <h2 style={{ margin: '0 0 20px' }}>举报详情 #{report.id}</h2>
       <Flash msg={msg} />
       <div style={{ display: 'inline-grid', gridTemplateColumns: 'auto auto', gap: 12, marginBottom: 20 }}>
-        <InfoRow label="举报类型" value={report.target_type} />
-        <InfoRow label="目标 ID" value={report.target_id} />
+        <InfoRow label="举报类型" value={t} />
+        <InfoRow label="目标 ID" value={tid} />
         <InfoRow label="状态" value={report.status} />
         <InfoRow label="原因" value={report.reason} />
         {report.content_snapshot && <InfoRow label="内容快照" value={report.content_snapshot} />}
         {report.resolution_note && <InfoRow label="处理备注" value={report.resolution_note} />}
       </div>
       {report.status === 'pending' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <Input value={note} onChange={e => setNote(e.target.value)} placeholder="处理备注（可选）" />
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Btn onClick={() => act('resolve')}>标记已处理</Btn>
-            <Btn danger onClick={() => act('dismiss')}>驳回举报</Btn>
+        <>
+          <div style={{ background: 'var(--paper-1)', border: '1px solid var(--paper-2)', borderRadius: 8, padding: 16, marginBottom: 16 }}>
+            <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>处置被举报对象</div>
+            {t === 'message' && (
+              <Btn danger disabled={busy} onClick={() => { if (!confirm('删除这条被举报的消息？')) return; takeAction(() => api.del(`/api/messages/${tid}`), '已删除被举报消息'); }}>
+                删除该消息并标记已处理
+              </Btn>
+            )}
+            {t === 'user' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Input value={banReason} onChange={e => setBanReason(e.target.value)} placeholder="封禁原因（必填）" />
+                  <Btn danger disabled={busy} onClick={() => { if (!banReason.trim()) { setMsg('请填写封禁原因'); return; } if (!confirm('封禁被举报用户？')) return; takeAction(() => api.post(`/api/admin/users/${tid}/ban`, { reason: banReason }), '已封禁被举报用户'); }}>封禁该用户并标记已处理</Btn>
+                </div>
+                <div><Btn small onClick={() => onNav && onNav('user-detail', { userId: tid })}>查看该用户 →</Btn></div>
+              </div>
+            )}
+            {t === 'server' && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <Btn danger disabled={busy} onClick={() => { if (!confirm('强制删除被举报服务器？不可撤销。')) return; takeAction(() => api.del(`/api/admin/servers/${tid}`), '已删除被举报服务器'); }}>删除该服务器并标记已处理</Btn>
+                <Btn small onClick={() => onNav && onNav('server-detail', { serverId: tid })}>查看该服务器 →</Btn>
+              </div>
+            )}
           </div>
-        </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Input value={note} onChange={e => setNote(e.target.value)} placeholder="处理备注（可选）" />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Btn disabled={busy} onClick={() => act('resolve')}>仅标记已处理</Btn>
+              <Btn danger disabled={busy} onClick={() => act('dismiss')}>驳回举报</Btn>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
@@ -652,7 +694,7 @@ function AdminShell({ adminUser }) {
       case 'servers':       return <ServersPage onNav={goTo} />;
       case 'server-detail': return <ServerDetailPage serverId={params.serverId} onBack={() => goTo('servers')} />;
       case 'reports':       return <ReportsPage onNav={goTo} />;
-      case 'report-detail': return <ReportDetailPage reportId={params.reportId} onBack={() => goTo('reports')} />;
+      case 'report-detail': return <ReportDetailPage reportId={params.reportId} onBack={() => goTo('reports')} onNav={goTo} />;
       case 'invites':       return <InvitesPage />;
       case 'join-requests': return <JoinRequestsPage />;
       case 'audit-logs':    return <AuditLogPage />;
