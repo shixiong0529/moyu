@@ -217,6 +217,9 @@ function App() {
   const [search, setSearch] = useStateApp('');
   const [tweaksOn, setTweaksOn] = useStateApp(false);
   const [messagesByChannel, setMessagesByChannel] = useStateApp({});
+  const [channelHasMore, setChannelHasMore] = useStateApp({});
+  const [loadingMore, setLoadingMore] = useStateApp(false);
+  const loadingMoreRef = useRefApp(false);
   const [inviteDecisions, setInviteDecisions] = useStateApp(init('invite-decisions', {}));
   const [sendError, setSendError] = useStateApp('');
   const [typingUsers, setTypingUsers] = useStateApp({});
@@ -599,6 +602,7 @@ function App() {
           ...prev,
           [channelKey]: mergeServerMessages(prev[channelKey], serverMessages),
         }));
+        setChannelHasMore(prev => ({ ...prev, [channelKey]: Boolean(result.has_more) }));
       } catch {
         if (!cancelled) {
           setMessagesByChannel(prev => ({ ...prev, [channelKey]: [] }));
@@ -611,6 +615,33 @@ function App() {
       cancelled = true;
     };
   }, [authStatus, isDM, activeChannel?.id, channelKey]);
+
+  const loadMoreChannelMessages = async () => {
+    if (isDM || !activeChannel?.id || typeof activeChannel.id !== 'number') return;
+    if (loadingMoreRef.current || !channelHasMore[channelKey]) return;
+    const existing = messagesByChannel[channelKey] || [];
+    const numericIds = existing.map(item => item.id).filter(id => typeof id === 'number');
+    if (!numericIds.length) return;
+    const oldest = Math.min(...numericIds);
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const result = await API.get(`/api/channels/${activeChannel.id}/messages?limit=50&before=${oldest}`);
+      const older = (result.messages || []).map(apiMessageToView);
+      setMessagesByChannel(prev => {
+        const cur = prev[channelKey] || [];
+        const curIds = new Set(cur.map(item => item.id));
+        const merged = [...older.filter(item => !curIds.has(item.id)), ...cur];
+        return { ...prev, [channelKey]: merged };
+      });
+      setChannelHasMore(prev => ({ ...prev, [channelKey]: Boolean(result.has_more) }));
+    } catch {
+      // 忽略，下次滚动可重试
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  };
 
   useEffectApp(function connectChannelSocket() {
     if (authStatus !== 'authenticated' || isDM || !activeChannel?.id || typeof activeChannel.id !== 'number') return;
@@ -1174,6 +1205,9 @@ function App() {
           currentRole={activeServer?.role}
           sendMode={sendMode}
           pendingMention={pendingMention}
+          onLoadMore={loadMoreChannelMessages}
+          hasMore={Boolean(channelHasMore[channelKey])}
+          loadingMore={loadingMore}
         />
       )}
 

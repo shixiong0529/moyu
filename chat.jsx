@@ -598,9 +598,10 @@ function ThreadPanel({ rootMessage, replies, onClose, onSendReply }) {
   );
 }
 
-function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, searchValue, setSearchValue, sendError, typingText, currentUser, currentRole, sendMode, pendingMention }) {
+function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, searchValue, setSearchValue, sendError, typingText, currentUser, currentRole, sendMode, pendingMention, onLoadMore, hasMore, loadingMore }) {
   const scrollRef = useRefChat(null);
   const atBottomRef = useRefChat(true);
+  const prevHeightRef = useRefChat(null);
   const [pinsOpen, setPinsOpen] = useStateChat(false);
   const [pins, setPins] = useStateChat([]);
   const [threadMessage, setThreadMessage] = useStateChat(null);
@@ -626,13 +627,28 @@ function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, s
   // 切换频道时回到底部
   useEffectChat(() => {
     atBottomRef.current = true;
+    prevHeightRef.current = null;
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [channel?.id]);
+
+  // 前插历史消息后，保持视口位置不跳动
+  React.useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (el && prevHeightRef.current != null) {
+      el.scrollTop = el.scrollHeight - prevHeightRef.current;
+      prevHeightRef.current = null;
+    }
+  }, [messages.length]);
 
   const onMessagesScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
     atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    // 滚动接近顶部时加载更多历史
+    if (el.scrollTop < 80 && hasMore && !loadingMore) {
+      prevHeightRef.current = el.scrollHeight;
+      onLoadMore?.();
+    }
   };
 
   useEffectChat(function refreshPinsOnChannel() {
@@ -674,6 +690,9 @@ function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, s
       />
       {pinsOpen && <PinsPanel pins={pins} onClose={() => setPinsOpen(false)} onUnpin={unpinMessage}/>}
       <div className="messages" ref={scrollRef} onScroll={onMessagesScroll}>
+        {loadingMore && (
+          <div style={{ textAlign: 'center', padding: '8px 0', color: 'var(--ink-2)', fontSize: 12 }}>加载更早的消息…</div>
+        )}
         {messages.map(m => {
           if (m.type === 'intro') return <IntroBlock key={m.id} title={m.title} body={m.body} />;
           if (m.type === 'day') return <div key={m.id} className="day-divider"><span>{m.label}</span></div>;
