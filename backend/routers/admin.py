@@ -559,6 +559,20 @@ def _ensure_bot_server_memberships(bot: Bot, db: Session) -> None:
     except Exception:
         return
     if not channel_ids:
+        # 未指定监听频道 = 自动监听管理员服务器模式：必须先把 bot 加入管理员服务器，
+        # 否则 runner 启动后 _discover_channels 找不到任何服务器会直接退出
+        admin_server = db.scalar(select(Server).where(Server.name.contains("管理员")))
+        if admin_server is None:
+            return
+        exists = db.scalar(
+            select(ServerMember).where(
+                ServerMember.user_id == bot.user_id,
+                ServerMember.server_id == admin_server.id,
+            )
+        )
+        if exists is None:
+            db.add(ServerMember(server_id=admin_server.id, user_id=bot.user_id, role="member"))
+            db.flush()
         return
     channels = db.scalars(select(Channel).where(Channel.id.in_(channel_ids))).all()
     server_ids = {ch.server_id for ch in channels}
@@ -701,6 +715,8 @@ async def start_bot(bot_id: int, admin: User = Depends(require_admin), db: Sessi
         raise HTTPException(status_code=404, detail="bot not found")
     if _bot_is_running(bot_id):
         return OkResponse(ok=True)
+    # 兜底补齐服务器成员关系（历史 bot 可能缺失），否则 runner 发现不了频道会静默退出
+    _ensure_bot_server_memberships(bot, db)
     from bot_runner import running_bots, BotRunner
     if bot_id in running_bots:
         await running_bots[bot_id].stop()

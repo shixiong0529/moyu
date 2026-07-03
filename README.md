@@ -126,6 +126,7 @@
 - [x] 每频道独立历史，`@bot名 /reset` 清空上下文
 - [x] 更换大模型预设（DeepSeek / Kimi / OpenAI / 自定义）不重启即生效
 - [x] 成员列表按监听频道显示 bot；运行中为红色，停止服务为暗色
+- [x] 联网搜索（可选）：配置 `BOT_SEARCH_PROVIDER` + `BOT_SEARCH_API_KEY` 后，bot 通过 function calling 按需调用 web_search 回答时事/最新信息，并附来源链接；支持 tavily（国际，每月 1000 次免费）与 bocha 博查（国内直连，付费），不配置则保持普通问答
 
 ### Telegram 推送通知
 - [x] 每用户独立 Bot Token（自带 bot，不依赖服务器统一 bot）
@@ -298,6 +299,13 @@ CORS_ORIGINS=https://shi.show,https://moyu.in
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_WEBHOOK_SECRET=
 APP_BASE_URL=
+
+# AI 机器人联网搜索（可选）
+# 配置后所有 bot 获得 web_search 工具，可回答时事/最新信息类问题
+# tavily：https://tavily.com 注册即送每月1000次免费（需国际网络可达）
+# bocha：https://open.bochaai.com 博查搜索，国内服务器可直连（付费）
+BOT_SEARCH_PROVIDER=
+BOT_SEARCH_API_KEY=
 ```
 
 ### 本地开发用 SQLite
