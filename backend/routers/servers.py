@@ -790,6 +790,13 @@ async def join_server(
         )
     )
     if existing is None:
+        # 持有效邀请码即视为已获授权（founder/成员主动邀请），直接加入，
+        # 不再进入审核队列——避免“被邀请人接受后 founder 还要再审一次”。
+        if invite is not None:
+            db.add(ServerMember(server_id=server.id, user_id=current_user.id, role="member"))
+            invite.uses += 1
+            db.commit()
+            return server_to_dict(server, "member", request=request)
         if server.join_policy == "closed":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="server is not accepting new members")
         if server.join_policy == "approval":

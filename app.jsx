@@ -37,14 +37,14 @@ function apiServerToRail(server) {
   };
 }
 
-function buildServerRailItems(apiServers) {
+function buildServerRailItems(apiServers, dmNotif = 0) {
   const sortedServers = [...(apiServers || [])].sort((a, b) => {
     if (a.name === '管理员服务器') return -1;
     if (b.name === '管理员服务器') return 1;
     return 0;
   });
   return [
-    { id: 'dm', name: '私信', kind: 'dm' },
+    { id: 'dm', name: '私信', kind: 'dm', unread: dmNotif },
     { id: 'divider' },
     ...sortedServers.map(apiServerToRail),
     { id: 'divider2' },
@@ -446,7 +446,14 @@ function App() {
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  const serverRailItems = useMemo(() => buildServerRailItems(apiServers), [apiServers]);
+  const dmNotifCount = useMemo(() => {
+    // 正在查看的会话不计入（视为已读）
+    const viewingId = (activeServerId === 'dm' && typeof activeDMId === 'number') ? activeDMId : null;
+    const dmUnread = (dmList || []).reduce((sum, dm) => sum + (dm.id === viewingId ? 0 : (dm.unread || 0)), 0);
+    const friendPending = (friendRequests || []).filter(r => r.direction === 'incoming' && r.status === 'pending').length;
+    return dmUnread + friendPending;
+  }, [dmList, friendRequests, activeServerId, activeDMId]);
+  const serverRailItems = useMemo(() => buildServerRailItems(apiServers, dmNotifCount), [apiServers, dmNotifCount]);
   const activeServer = useMemo(() => (
     serverRailItems.find(s => s.id === activeServerId) ||
     serverRailItems.find(s => s.id === 'bookclub') ||
@@ -735,6 +742,15 @@ function App() {
       cancelled = true;
     };
   }, [authStatus, isDM, activeDMId, channelKey, currentUserDisplay.id]);
+
+  useEffectApp(function clearDMUnreadOnOpen() {
+    if (!isDM || typeof activeDMId !== 'number') return;
+    setDmList(prev => (
+      prev.some(dm => dm.id === activeDMId && dm.unread)
+        ? prev.map(dm => (dm.id === activeDMId ? { ...dm, unread: 0 } : dm))
+        : prev
+    ));
+  }, [isDM, activeDMId]);
 
   const allMessages = useMemo(() => {
     const extras = messagesByChannel[channelKey] || [];
