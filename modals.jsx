@@ -1391,9 +1391,9 @@ function ProfileCard({ member, position, onClose, onOpenDM, onMention, viewerRol
     bot: '机器人',
   };
   const pronounLabels = {
-    man: '男人',
-    woman: '女人',
-    private: '隐私',
+    man: '他（him）',
+    woman: '她（her）',
+    private: '保密',
   };
   const handle = member.handle || (member.username ? '@' + member.username : `@${member.id ? String(member.id).replace('u-', '') : 'member'}`);
   const roleLabel = roleLabels[member.role] || '';
@@ -1544,6 +1544,21 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
     }
   };
 
+  const handleRemoveAvatar = async () => {
+    if (avatarUploading) return;
+    if (!confirm('移除自定义头像，恢复为默认颜色头像？')) return;
+    setAvatarUploading(true);
+    setAvatarError('');
+    try {
+      const updated = await API.patch('/api/users/me', { avatar_url: null });
+      onUserUpdate?.(updated);
+    } catch (err) {
+      setAvatarError(err.message || '移除失败，请重试');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
   const handleSaveDisplayName = async () => {
     const trimmed = displayName.trim();
     if (!trimmed || trimmed === user?.name) return;
@@ -1634,6 +1649,7 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
   const { useEffect: useEffectTg } = React;
   const [tgBound, setTgBound] = useStateM(false);
   const [tgEnabled, setTgEnabled] = useStateM(false);
+  const [tgBoundChatId, setTgBoundChatId] = useStateM(null);
   const [tgBotToken, setTgBotToken] = useStateM('');
   const [tgChatId, setTgChatId] = useStateM('');
   const [tgLoading, setTgLoading] = useStateM(false);
@@ -1644,18 +1660,22 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
     API.get('/api/telegram/status').then(s => {
       setTgBound(s.bound);
       setTgEnabled(s.notify_enabled);
+      setTgBoundChatId(s.chat_id ?? null);
     }).catch(() => {});
   }, [section]);
 
   async function connectTelegram() {
     const token = tgBotToken.trim();
-    const cid = parseInt(tgChatId.trim(), 10);
+    const cidText = tgChatId.trim();
     if (!token) { setTgError('请填写 Bot Token'); return; }
-    if (!cid) { setTgError('请填写有效的 Chat ID（纯数字）'); return; }
+    // 严格校验：必须是完整的整数（个人为正数，群组以 - 开头），拒绝 "123abc" 这类被 parseInt 静默截断的输入
+    if (!/^-?\d+$/.test(cidText)) { setTgError('Chat ID 必须是纯数字（群组 ID 以 - 开头）'); return; }
+    const cid = parseInt(cidText, 10);
     setTgLoading(true); setTgError('');
     try {
       await API.post('/api/telegram/connect', { bot_token: token, chat_id: cid });
       setTgBound(true); setTgEnabled(true);
+      setTgBoundChatId(cid);
       setTgBotToken(''); setTgChatId('');
     } catch (err) {
       setTgError(err.message || '连接失败，请检查 Bot Token 和 Chat ID');
@@ -1677,11 +1697,23 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
     if (!confirm('确定要解除 Telegram 绑定吗？')) return;
     try {
       await API.del('/api/telegram/bind');
-      setTgBound(false); setTgEnabled(false);
+      setTgBound(false); setTgEnabled(false); setTgBoundChatId(null);
     } catch (err) {
       setTgError(err.message || '解绑失败');
     }
   }
+
+  // 密码弹窗打开时，Esc 只关闭密码弹窗本身（capture 阶段拦截，阻止 App 级 Esc 把整个设置一起关掉）
+  useEffectM(() => {
+    if (!passwordOpen) return;
+    const h = (e) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      closePasswordModal();
+    };
+    window.addEventListener('keydown', h, true);
+    return () => window.removeEventListener('keydown', h, true);
+  }, [passwordOpen, passwordSaving]);
 
   const ACCENTS = [
     { id: 'wood', color: '#8a5a2b', name: 'Wood' },
@@ -1699,7 +1731,6 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
         <div className="group-label">用户</div>
         <a className={section === 'account' ? 'active' : ''} onClick={() => setSection('account')}>我的账号</a>
         <a className={section === 'profile' ? 'active' : ''} onClick={() => setSection('profile')}>个人资料</a>
-        <a>隐私与安全</a>
 
         <div className="settings-sidebar-divider"/>
 
@@ -1712,8 +1743,7 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
 
         <div className="group-label">其他</div>
         <a className={section === 'shortcuts' ? 'active' : ''} onClick={() => setSection('shortcuts')}>快捷键</a>
-        <a>语言</a>
-        <a className="danger" onClick={onLogout}>退出</a>
+        <a className="danger" onClick={() => { if (confirm('确定要退出登录吗？')) onLogout?.(); }}>退出登录</a>
       </div>
 
       <div className="settings-main">
@@ -1730,21 +1760,29 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
               </div>
               <div className="theme-cards">
                 {[
-                  { id: 'light',    name: '暖纸',  bg: '#faf7f1', fg: '#2a1f14', a: '#8a5a2b' },
-                  { id: 'white',    name: '纯白',  bg: '#ffffff', fg: '#1a1a1c', a: '#5865f2' },
-                  { id: 'slate',    name: '石板灰', bg: '#f0f2f5', fg: '#1c1f28', a: '#5865f2' },
-                  { id: 'dark',     name: '深色',  bg: '#313338', fg: '#f2f3f5', a: '#5865f2' },
-                  { id: 'midnight', name: '午夜',  bg: '#0d0f11', fg: '#e8eaf0', a: '#7289da' },
-                  { id: 'forest',   name: '苔绿',  bg: '#1e2921', fg: '#d7f0da', a: '#57f287' },
+                  { id: 'light',    name: '暖纸',  bg: '#faf7f1', side: '#f5efe4', fg: '#2a1f14', mut: '#b8a583', a: '#8a5a2b' },
+                  { id: 'white',    name: '纯白',  bg: '#ffffff', side: '#f2f3f5', fg: '#1a1a1c', mut: '#c4c9d0', a: '#5865f2' },
+                  { id: 'slate',    name: '石板灰', bg: '#f0f2f5', side: '#e3e5e8', fg: '#1c1f28', mut: '#b5bac1', a: '#5865f2' },
+                  { id: 'dark',     name: '暖夜',  bg: '#313338', side: '#2b2d31', fg: '#f2f3f5', mut: '#4e5058', a: '#5865f2' },
+                  { id: 'midnight', name: '午夜',  bg: '#0d0f11', side: '#111214', fg: '#e8eaf0', mut: '#2c2e34', a: '#7289da' },
+                  { id: 'forest',   name: '苔绿',  bg: '#1e2921', side: '#182018', fg: '#d7f0da', mut: '#2a4230', a: '#57f287' },
                 ].map(t => (
                   <div key={t.id}
                        className={`theme-card ${theme === t.id ? 'active' : ''}`}
                        onClick={() => setTheme(t.id)}>
-                    <div className="swatch">
-                      <div style={{ background: t.bg }}/>
-                      <div style={{ background: t.fg, maxWidth: 8 }}/>
-                      <div style={{ background: t.a, maxWidth: 8 }}/>
-                      <div style={{ background: t.bg }}/>
+                    {/* 迷你界面预览：侧栏 + 消息区，比色条更直观 */}
+                    <div className="swatch" style={{ background: t.bg, display: 'flex', gap: 0 }}>
+                      <div style={{ width: 18, flex: 'none', background: t.side, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, paddingTop: 5 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: t.a }}/>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: t.mut }}/>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: t.mut }}/>
+                      </div>
+                      <div style={{ flex: 1, padding: '6px 7px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ height: 4, width: '55%', borderRadius: 2, background: t.fg, opacity: 0.85 }}/>
+                        <div style={{ height: 4, width: '85%', borderRadius: 2, background: t.mut }}/>
+                        <div style={{ height: 4, width: '70%', borderRadius: 2, background: t.mut }}/>
+                        <div style={{ height: 4, width: '40%', borderRadius: 2, background: t.a, marginTop: 'auto' }}/>
+                      </div>
                     </div>
                     <div style={{ fontFamily: 'var(--ff-ui)', fontWeight: 600, fontSize: 13 }}>{t.name}</div>
                   </div>
@@ -1831,12 +1869,20 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
                     disabled={avatarUploading}
                     onChange={e => { handleAvatarUpload(e.target.files?.[0]); e.target.value = ''; }} />
                 </label>
-                {avatarError && <div style={{ fontSize: 12, color: 'var(--rust)', marginTop: 6 }}>{avatarError}</div>}
-                <div>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink-0)' }}>{user.name}</div>
                   <div style={{ fontFamily: 'var(--ff-mono)', fontSize: 13, color: 'var(--ink-2)', marginTop: 4 }}>{user.handle}</div>
+                  {user.avatar_url && (
+                    <button
+                      className="btn btn-ghost"
+                      style={{ height: 26, padding: '0 10px', fontSize: 12, marginTop: 8 }}
+                      disabled={avatarUploading}
+                      onClick={handleRemoveAvatar}
+                    >移除头像</button>
+                  )}
                 </div>
               </div>
+              {avatarError && <div style={{ fontSize: 13, color: 'var(--rust)', marginTop: 10 }}>{avatarError}</div>}
             </div>
 
             {/* 显示名称 — 可编辑 */}
@@ -1858,7 +1904,7 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
                 <button
                   className="btn btn-primary"
                   onClick={handleSaveDisplayName}
-                  disabled={nameSaving}
+                  disabled={nameSaving || !displayName.trim() || displayName.trim() === user?.name}
                 >
                   {nameSaving ? '保存中…' : '保存'}
                 </button>
@@ -1867,16 +1913,15 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
               {nameSaved && <div style={{ color: 'var(--sage)', fontSize: 13, marginTop: 6 }}>已保存</div>}
             </div>
 
-            {/* 用户名 — 只读 */}
-            <div className="settings-row">
-              <div className="label-block">
-                <div className="title" style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-2)' }}>用户名</div>
-                <div style={{ fontSize: 15, marginTop: 4, fontFamily: 'var(--ff-mono)', color: 'var(--ink-1)' }}>{user.handle}</div>
-              </div>
-            </div>
-
+            {/* 账号安全 */}
             <div className="settings-section">
-              <button className="btn btn-primary" onClick={() => setPasswordOpen(true)}>修改密码</button>
+              <div className="settings-row">
+                <div className="label-block">
+                  <div className="title">密码</div>
+                  <div className="desc">定期更换密码可以让账号更安全。</div>
+                </div>
+                <button className="btn btn-primary" onClick={() => setPasswordOpen(true)}>修改密码</button>
+              </div>
             </div>
           </>
         )}
@@ -1903,9 +1948,9 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
                 onChange={e => { setProfilePronouns(e.target.value); setProfileError(''); setProfileSaved(false); }}
                 style={{ width: 200 }}
               >
-                <option value="man">男人</option>
-                <option value="woman">女人</option>
-                <option value="private">隐私</option>
+                <option value="man">他（him）</option>
+                <option value="woman">她（her）</option>
+                <option value="private">保密</option>
               </select>
             </div>
             {profileError && <div style={{ color: 'var(--rust)', fontSize: 13, marginTop: 10 }}>{profileError}</div>}
@@ -1927,7 +1972,7 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
                 <div className="title">减少动画效果</div>
                 <div className="desc">禁用界面过渡动画，提升低性能设备或敏感用户体验。</div>
               </div>
-              <ToggleSwitch defaultOn={reduceMotion} onChange={val => setReduceMotion?.(val)}/>
+              <ToggleSwitch on={!!reduceMotion} onChange={val => setReduceMotion?.(val)}/>
             </div>
 
             <div className="settings-section" style={{ marginTop: 20 }}>
@@ -1949,6 +1994,7 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
                 <button
                   className="btn btn-ghost"
                   style={{ height: 28, padding: '0 10px', fontSize: 12, marginLeft: 4 }}
+                  disabled={(fontSize ?? 100) === 100}
                   onClick={() => setFontSize?.(100)}
                 >重置</button>
               </div>
@@ -1959,7 +2005,7 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
                 <div className="title">始终显示时间戳</div>
                 <div className="desc">在每条连续消息旁始终显示发送时间，不再需要鼠标悬停才能看到。</div>
               </div>
-              <ToggleSwitch defaultOn={alwaysTimestamps} onChange={val => setAlwaysTimestamps?.(val)}/>
+              <ToggleSwitch on={!!alwaysTimestamps} onChange={val => setAlwaysTimestamps?.(val)}/>
             </div>
 
             <div className="settings-row" style={{ marginTop: 20 }}>
@@ -1967,7 +2013,7 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
                 <div className="title">图片点击前模糊</div>
                 <div className="desc">聊天中的图片默认模糊显示，点击图片后才呈现原图。</div>
               </div>
-              <ToggleSwitch defaultOn={blurImages} onChange={val => setBlurImages?.(val)}/>
+              <ToggleSwitch on={!!blurImages} onChange={val => setBlurImages?.(val)}/>
             </div>
           </>
         )}
@@ -1998,13 +2044,15 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
               </div>
             </div>
 
-            <ShortcutGroup title="消息" items={[
-              ['Enter', sendMode === 'enter' ? '发送消息' : '换行'],
-              ['Shift + Enter', sendMode === 'enter' ? '换行' : '换行'],
-              ['Ctrl / Cmd + Enter', sendMode === 'ctrl-enter' ? '发送消息' : '发送消息'],
-              ['Ctrl / Cmd + V', '粘贴图片'],
-              ['Ctrl / Cmd + U', '上传图片'],
-            ]}/>
+            <ShortcutGroup title="消息" items={
+              (sendMode === 'enter'
+                ? [['Enter', '发送消息'], ['Shift + Enter', '换行']]
+                : [['Ctrl / Cmd + Enter', '发送消息'], ['Enter', '换行']]
+              ).concat([
+                ['Ctrl / Cmd + V', '粘贴图片'],
+                ['Ctrl / Cmd + U', '上传图片'],
+              ])
+            }/>
             <ShortcutGroup title="导航" items={[
               ['Ctrl / Cmd + K', '快速跳转'],
               ['Ctrl / Cmd + /', '打开快捷键'],
@@ -2022,6 +2070,11 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
 
             {!tgBound ? (
               <>
+                <div style={{ padding: '12px 16px', borderRadius: 8, background: 'var(--paper-1)', border: '1px solid var(--paper-3)', marginBottom: 20, fontSize: 13, color: 'var(--ink-1)', lineHeight: 1.9 }}>
+                  <div><b>1.</b> 在 Telegram 搜索 <span style={{ fontFamily: 'var(--ff-mono)' }}>@BotFather</span>，发送 <span style={{ fontFamily: 'var(--ff-mono)' }}>/newbot</span> 创建机器人，获得 Bot Token；</div>
+                  <div><b>2.</b> 搜索 <span style={{ fontFamily: 'var(--ff-mono)' }}>@userinfobot</span>，发送任意消息，获得你的 Chat ID；</div>
+                  <div><b>3.</b> 给你自己的新机器人发一条 <span style={{ fontFamily: 'var(--ff-mono)' }}>/start</span>（否则机器人无法主动私信你），再回来填写绑定。</div>
+                </div>
                 <div className="settings-section">
                   <label className="form-label">Bot Token</label>
                   <input
@@ -2043,7 +2096,6 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
                     onChange={e => { setTgChatId(e.target.value); setTgError(''); }}
                     autoComplete="off"
                   />
-                  <div className="form-hint">不知道 Chat ID？在 Telegram 搜索 @userinfobot，发送任意消息即可获取。</div>
                 </div>
                 {tgError && (
                   <div style={{ padding: '8px 12px', borderRadius: 7, marginBottom: 12, background: 'rgba(181,88,58,0.08)', border: '1px solid rgba(181,88,58,0.25)', color: 'var(--rust)', fontSize: 13 }}>
@@ -2054,6 +2106,7 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
                   <button className="btn btn-primary" onClick={connectTelegram} disabled={tgLoading}>
                     {tgLoading ? '连接中…' : '测试并绑定'}
                   </button>
+                  <div className="form-hint" style={{ marginTop: 8 }}>绑定时会向你的 Telegram 发送一条测试消息以确认配置有效。</div>
                 </div>
               </>
             ) : (
@@ -2062,7 +2115,9 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
                   <div className="settings-row">
                     <div className="label-block">
                       <div className="title">已绑定 Telegram ✓</div>
-                      <div className="desc">你的账号已和 Telegram 关联，可在下方管理通知。</div>
+                      <div className="desc">
+                        {tgBoundChatId ? `绑定的 Chat ID：${tgBoundChatId}` : '你的账号已和 Telegram 关联，可在下方管理通知。'}
+                      </div>
                     </div>
                     <button className="btn btn-secondary" onClick={unbindTelegram}>解除绑定</button>
                   </div>
@@ -2073,7 +2128,7 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
                       <div className="title">推送通知</div>
                       <div className="desc">开启后收到好友申请、私信、@提及 时推送到 Telegram。</div>
                     </div>
-                    <ToggleSwitch defaultOn={tgEnabled} onChange={toggleTgNotify}/>
+                    <ToggleSwitch on={tgEnabled} onChange={toggleTgNotify}/>
                   </div>
                 </div>
                 {tgError && <div style={{ color: 'var(--rust)', fontSize: 13 }}>{tgError}</div>}
@@ -2115,6 +2170,9 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
               onChange={e => { setNewPassword(e.target.value); setPasswordError(''); }}
               autoComplete="new-password"
             />
+            {newPassword.length > 0 && newPassword.length < 6 && (
+              <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: -8, marginBottom: 10 }}>新密码至少需要 6 位（还差 {6 - newPassword.length} 位）</div>
+            )}
 
             <label className="form-label">确认新密码 <span>*</span></label>
             <input
@@ -2142,10 +2200,14 @@ function Settings({ onClose, theme, setTheme, accent, setAccent, density, setDen
   );
 }
 
-function ToggleSwitch({ defaultOn = false, onChange }) {
-  const [on, setOn] = useStateM(defaultOn);
+function ToggleSwitch({ defaultOn = false, on, onChange }) {
+  // 受控模式：传了 on 就完全跟随父级状态（异步加载/失败回滚时不脱节）；
+  // 不传 on 则退回非受控（defaultOn + 内部状态），兼容旧调用方。
+  const [internal, setInternal] = useStateM(defaultOn);
+  const controlled = on !== undefined;
+  const val = controlled ? on : internal;
   return (
-    <div className={`toggle ${on ? 'on' : ''}`} onClick={() => { setOn(!on); onChange?.(!on); }}/>
+    <div className={`toggle ${val ? 'on' : ''}`} onClick={() => { if (!controlled) setInternal(!val); onChange?.(!val); }}/>
   );
 }
 

@@ -49,6 +49,7 @@ def get_status(current_user: User = Depends(get_current_user)):
     return {
         "bound": current_user.telegram_chat_id is not None,
         "notify_enabled": current_user.telegram_notify_enabled,
+        "chat_id": current_user.telegram_chat_id,
     }
 
 
