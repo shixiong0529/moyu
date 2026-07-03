@@ -99,12 +99,12 @@ class ServerFriendInviteRequest(BaseModel):
 
 
 class MessageCreateRequest(BaseModel):
-    content: str = Field(min_length=1)
+    content: str = Field(min_length=1, max_length=4000)
     reply_to_id: int | None = None
 
 
 class MessageUpdateRequest(BaseModel):
-    content: str = Field(min_length=1)
+    content: str = Field(min_length=1, max_length=4000)
 
 
 class ReactionRequest(BaseModel):
@@ -112,7 +112,7 @@ class ReactionRequest(BaseModel):
 
 
 class DMCreateRequest(BaseModel):
-    content: str = Field(min_length=1)
+    content: str = Field(min_length=1, max_length=4000)
 
 
 class HealthSchema(BaseModel):

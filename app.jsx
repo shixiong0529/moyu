@@ -1012,7 +1012,7 @@ function App() {
         color: 'var(--ink-1)',
         fontFamily: 'var(--ff-serif)',
       }}>
-        正在进入 Biscord…
+        正在进入 摸鱼社区…
       </div>
     );
   }

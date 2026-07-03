@@ -248,6 +248,10 @@ async def create_message(
     db: Session = Depends(get_db),
 ):
     channel = require_channel_member(db, channel_id, current_user.id)
+    if payload.reply_to_id is not None:
+        parent = db.get(Message, payload.reply_to_id)
+        if parent is None or parent.channel_id != channel_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid reply target")
     message = Message(
         channel_id=channel_id,
         author_id=current_user.id,

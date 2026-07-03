@@ -10,6 +10,7 @@ from sqlalchemy import delete as sa_delete, func, select, update as sa_update
 from sqlalchemy.orm import Session
 
 from auth import get_current_user, hash_password
+from crypto_utils import decrypt_secret, encrypt_secret
 from database import get_db
 from models import (
     AuditLog, Bot, Channel, ChannelGroup, DirectMessage, FriendRequest,
@@ -498,20 +499,20 @@ def _ensure_user_for_bot(bot: Bot, db: Session) -> None:
         user = db.get(User, bot.user_id)
         if user:
             user.display_name = bot.display_name
-            user.password_hash = hash_password(bot.password)
+            user.password_hash = hash_password(decrypt_secret(bot.password))
             db.flush()
             return
     user = db.scalar(select(User).where(User.username == bot.username))
     if user:
         user.display_name = bot.display_name
-        user.password_hash = hash_password(bot.password)
+        user.password_hash = hash_password(decrypt_secret(bot.password))
         bot.user_id = user.id
         db.flush()
         return
     user = User(
         username=bot.username,
         display_name=bot.display_name,
-        password_hash=hash_password(bot.password),
+        password_hash=hash_password(decrypt_secret(bot.password)),
         avatar_color=bot.avatar_color,
         status="online",
         is_bot=True,
@@ -572,7 +573,7 @@ def create_bot(payload: BotCreate, admin: User = Depends(require_admin), db: Ses
     bot = Bot(
         name=payload.name,
         username=payload.username,
-        password=payload.password,
+        password=encrypt_secret(payload.password),
         display_name=payload.display_name,
         llm_api_key=payload.llm_api_key,
         llm_base_url=payload.llm_base_url,
@@ -616,6 +617,8 @@ async def update_bot(
     for field, value in payload.model_dump(exclude_none=True).items():
         if field == "channel_ids":
             setattr(bot, field, json.dumps(value))
+        elif field == "password":
+            setattr(bot, field, encrypt_secret(value))
         else:
             setattr(bot, field, value)
     if payload.display_name or payload.password:

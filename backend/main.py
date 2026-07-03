@@ -180,8 +180,8 @@ def no_store_file(path: Path) -> FileResponse:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["null", "http://localhost", "http://127.0.0.1",
-                   *([o for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()])],
+    allow_origins=["http://localhost", "http://127.0.0.1",
+                   *([o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()])],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -220,11 +220,26 @@ async def upload_image(
     if suffix not in allowed_exts or not (file.content_type or "").startswith("image/"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="only image files are allowed")
 
+    # 最多读取 5MB + 1 字节：既能判断超限，又避免把超大文件整体读入内存
+    max_bytes = 5 * 1024 * 1024
+    content = await file.read(max_bytes + 1)
+    if len(content) > max_bytes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="file is too large")
+
+    # magic-byte 校验：客户端提供的扩展名/content-type 可伪造，按真实字节确认是图片
+    def _is_image(data: bytes) -> bool:
+        return (
+            data.startswith(b"\xff\xd8\xff")                       # jpeg
+            or data.startswith(b"\x89PNG\r\n\x1a\n")               # png
+            or data[:6] in (b"GIF87a", b"GIF89a")                  # gif
+            or (data[:4] == b"RIFF" and data[8:12] == b"WEBP")     # webp
+        )
+
+    if not _is_image(content):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="only image files are allowed")
+
     filename = f"{uuid.uuid4().hex}{suffix}"
     target = UPLOAD_DIR / filename
-    content = await file.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="file is too large")
     target.write_bytes(content)
     return {"url": f"/uploads/{filename}"}
 

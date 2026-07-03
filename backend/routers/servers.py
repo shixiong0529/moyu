@@ -767,11 +767,18 @@ async def join_server(
         if invite.max_uses is not None and invite.uses >= invite.max_uses:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invite exhausted")
         server = db.get(Server, invite.server_id)
-    elif code.isdigit():
-        server = db.get(Server, int(code))
+    else:
+        # 无有效邀请码时，只允许通过数字ID/名称加入「公开(open)或推荐」的服务器，
+        # 避免用户枚举任意私有服务器ID去刷 founder 的加入申请/通知。
+        def _joinable(candidate: Server | None) -> Server | None:
+            if candidate and (candidate.is_recommended or candidate.join_policy == "open"):
+                return candidate
+            return None
 
-    if server is None:
-        server = db.scalar(select(Server).where(Server.name == code))
+        if code.isdigit():
+            server = _joinable(db.get(Server, int(code)))
+        if server is None:
+            server = _joinable(db.scalar(select(Server).where(Server.name == code)))
 
     if server is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid invite code")

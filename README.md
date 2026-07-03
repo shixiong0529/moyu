@@ -1,6 +1,6 @@
 # 摸鱼社区
 
-> 一个摸鱼风格的中文互动社区平台，支持服务器、频道、实时聊天、私信、好友系统和 Telegram 推送通知。
+> 一个摸鱼风格的中文互动社区平台，支持服务器、频道、实时聊天、私信、AI机器人、好友系统和 Telegram 推送通知。
 
 ![Biscord Login](docs/demo-login.png)
 
@@ -661,36 +661,61 @@ python -m alembic upgrade head
 
 站点配置文件位于 `/etc/nginx/sites-enabled/`，每个域名一个文件。配置结构：
 
-- **80 端口**：acme-challenge 验证 + 301 跳转 HTTPS
+- **80 端口**：301 跳转 HTTPS（证书走 DNS-01 验证，不再需要 HTTP acme-challenge）
 - **443 端口**：SSL 终止，反向代理到本机 `127.0.0.1:8001`，支持 WebSocket Upgrade
 
 ### SSL 证书
 
-使用 Let's Encrypt + Certbot，证书存放于 `/etc/letsencrypt/live/<域名>/`。
+**现状（已验证生效）**：`moyu.in`、`www.moyu.in`、`shi.show` 均使用 **`acme.sh` + DNS-01（阿里云 DNS API）** 自动续期，证书仍安装在 `/etc/letsencrypt/live/<域名>/`（供 Nginx 引用）。装完不用再管。
 
-**自动续期正常，无需手动操作。** Certbot systemd timer 每天运行两次，证书剩余不足 30 天时自动续期。
+> ⚠️ **不要再用 Certbot / HTTP-01**。这台 ECS 装了阿里云云安全中心（Aegis/云盾），会拦截被判定为"可疑"的境外流量。Let's Encrypt 的验证节点大多在境外，请求命中拦截规则——**nginx access log 里能看到请求已被正确处理并返回 200**，但 Aegis 在更前面把响应换成 403 发给 Let's Encrypt，导致 `certbot --webroot`/`--standalone`/`--nginx` 在本机 curl 完全正常的情况下始终验证失败。同服务器上所有域名只要走 HTTP-01 都会一样被拦，所以统一改用 DNS-01。旧的 certbot 续期配置已挪到 `/etc/letsencrypt/renewal-disabled/`，`certbot renew` 不会再尝试它们。
 
-> ⚠️ 注意：`certbot renew --dry-run` 在此服务器上会失败（阿里云屏蔽了 Let's Encrypt Staging 测试服务器的 IP），但真实续期完全正常，不影响自动续期。不要用 `--dry-run` 判断续期是否可用。
-
-**申请新域名证书：**
+**申请 / 重签一个域名（DNS-01）：**
 ```bash
-sudo certbot certonly --webroot \
-  -w /var/www/certbot \
-  -d <域名> \
-  -d www.<域名>
+# 首次装 acme.sh（若未装）
+curl https://get.acme.sh | sh -s email=你的邮箱
+
+# 阿里云 RAM 子账号 AccessKey，只给 AliyunDNSFullAccess 权限（不要用主账号 AK）
+export Ali_Key="你的-AccessKey-ID"
+export Ali_Secret="你的-AccessKey-Secret"
+
+# --dnssleep 30：跳过不可靠的 DNS 自检，固定等 30 秒再让 Let's Encrypt 校验
+~/.acme.sh/acme.sh --issue --dns dns_ali -d moyu.in -d www.moyu.in \
+  --server letsencrypt --dnssleep 30
+
+~/.acme.sh/acme.sh --install-cert -d moyu.in \
+  --key-file       /etc/letsencrypt/live/moyu.in/privkey.pem \
+  --fullchain-file /etc/letsencrypt/live/moyu.in/fullchain.pem \
+  --reloadcmd      "nginx -t && systemctl reload nginx"
 ```
+
+> ⚠️ **多账号踩坑（域名分属两个不同阿里云账号）**：`dns_ali` 插件把 `Ali_Key`/`Ali_Secret` 存在**全局共享**的 `~/.acme.sh/account.conf`，不是按域名分开的——同机多账号时，后签发的会覆盖前面的 AccessKey，几个月后自动续期会用错账号 key 静默失败。本机的账号归属：
+>
+> | 域名 | 阿里云账号 | 独立配置目录（`--config-home`） |
+> |------|-----------|--------------------------------|
+> | `moyu.in` / `www.moyu.in` / `chat.slow.best` | 阿里巴巴**国际站** | `/root/.acme.sh-intl` |
+> | `shi.show` / `www.shi.show` | 阿里云**中国站** | `/root/.acme.sh-cn` |
+>
+> 解法：每个账号用各自的 `--config-home` 和对应账号的 AccessKey 签发，例如国际站的 `moyu.in`：
+>
+> ```bash
+> mkdir -p /root/.acme.sh-intl
+> export Ali_Key="国际站-AccessKey-ID"; export Ali_Secret="国际站-AccessKey-Secret"
+> ~/.acme.sh/acme.sh --issue --dns dns_ali -d moyu.in -d www.moyu.in \
+>   --server letsencrypt --dnssleep 30 --config-home /root/.acme.sh-intl
+>
+> # 中国站的 shi.show 换成中国站 AK + /root/.acme.sh-cn
+> ```
+>
+> 并给 cron 加一条对应 `--config-home` 的独立续期任务，别指望默认那条 `acme.sh --cron` 覆盖所有账号。改完用 `~/.acme.sh/acme.sh --list --config-home /root/.acme.sh-intl` 和 `... --config-home /root/.acme.sh-cn` 分别确认每个账号下只有自己的域名。
 
 **查看证书到期时间：**
 ```bash
-sudo certbot certificates
+~/.acme.sh/acme.sh --list --config-home /root/.acme.sh-intl   # 国际站：moyu.in / chat.slow.best
+~/.acme.sh/acme.sh --list --config-home /root/.acme.sh-cn     # 中国站：shi.show
 ```
 
-**验证 timer 状态：**
-```bash
-sudo systemctl status certbot.timer
-```
-
-详细续期操作见 `DEPLOY_UPDATE.md`。
+`acme.sh` 安装时会自己写一条 `acme.sh --cron` 的 crontab，到期前自动改 DNS TXT、自动续期、自动 reload nginx，无需手动去控制台粘贴 TXT 值。完整排查记录与另一域名（`gaokao.moyu.in`）的同类问题见 `../gaokao/README.md`。
 
 ### 已配置域名
 

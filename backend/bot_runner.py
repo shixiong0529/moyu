@@ -14,6 +14,8 @@ import httpx
 import websockets
 from openai import AsyncOpenAI
 
+from crypto_utils import decrypt_secret
+
 os.environ.setdefault("NO_PROXY", "localhost,127.0.0.1")
 
 if TYPE_CHECKING:
@@ -40,7 +42,7 @@ class BotRunner:
         self._reload(bot)
 
     def _reload(self, bot: "BotModel") -> None:
-        self.password = bot.password
+        self.password = decrypt_secret(bot.password)
         self.display_name = bot.display_name
         self.llm = AsyncOpenAI(api_key=bot.llm_api_key, base_url=bot.llm_base_url)
         self.llm_model = bot.llm_model
