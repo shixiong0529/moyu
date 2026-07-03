@@ -328,6 +328,20 @@ def delete_channel_group(group_id: int, admin: User = Depends(require_admin), db
     grp = db.get(ChannelGroup, group_id)
     if grp is None:
         raise HTTPException(status_code=404, detail="channel group not found")
+    # 组内频道要有去处，否则 group_id 被置空后频道会从侧边栏消失（隐形孤儿）
+    channel_count = db.scalar(select(func.count()).select_from(Channel).where(Channel.group_id == group_id))
+    if channel_count:
+        other = db.scalar(
+            select(ChannelGroup)
+            .where(ChannelGroup.server_id == grp.server_id, ChannelGroup.id != group_id)
+            .order_by(ChannelGroup.position)
+        )
+        if other is None:
+            raise HTTPException(status_code=400, detail="该分组下还有频道且无其它分组可移动，请先创建其它分组或删除组内频道")
+        # 用 Core UPDATE 重分配，并 flush，避免 db.delete(grp) 的关系级联再把 group_id 置空
+        db.execute(sa_update(Channel).where(Channel.group_id == group_id).values(group_id=other.id))
+        db.flush()
+        db.expire(grp)
     write_audit(db, admin.id, "delete_channel_group", "channel_group", group_id, {"name": grp.name})
     db.delete(grp)
     db.commit()

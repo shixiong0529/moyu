@@ -113,6 +113,8 @@ async def create_dm_message(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if user_id == current_user.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能给自己发送私信")
     if db.get(User, user_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
     message = DirectMessage(sender_id=current_user.id, receiver_id=user_id, content=payload.content)

@@ -109,6 +109,8 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
     user = db.get(User, int(user_id)) if user_id else None
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid refresh token")
+    if user.is_banned:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=user.banned_reason or "account banned")
 
     return make_token_pair(user)
 
