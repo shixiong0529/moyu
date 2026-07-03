@@ -590,12 +590,13 @@ function App() {
       .filter(group => group.items.length)
   ), [serverMembers, activeChannel?.id, activeChannel?.kind]);
 
-  // 输入框 @ 自动补全用的扁平成员列表（含当前频道可见的 bot），不含自己
+  // 输入框 @ 自动补全用的扁平成员列表（含当前频道可见的 bot），不含自己；
+  // 保留 status/isBot 供补全组件优先展示在线用户
   const mentionMembers = useMemo(() => (
     visibleServerMembers
       .flatMap(group => group.items)
       .filter(m => m.userId !== currentUserDisplay.id)
-      .map(m => ({ id: m.id, name: m.name, color: m.color }))
+      .map(m => ({ id: m.id, name: m.name, color: m.color, status: m.status, isBot: m.isBot }))
   ), [visibleServerMembers, currentUserDisplay.id]);
 
   useEffectApp(function loadChannelMessages() {
@@ -1221,7 +1222,13 @@ function App() {
         />
       )}
 
-      {!isDM && showMembers && <MemberSidebar members={visibleServerMembers} onOpenMember={handleOpenMember}/>}
+      {!isDM && showMembers && (
+        <MemberSidebar
+          members={visibleServerMembers}
+          onOpenMember={handleOpenMember}
+          onMentionMember={(m) => setPendingMention({ name: m.name, ts: Date.now() })}
+        />
+      )}
 
       {createOpen && (
         <CreateServerModal

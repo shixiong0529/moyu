@@ -20,7 +20,7 @@ function escapeHtml(value) {
 
 function renderMessageHtml(content) {
   const escaped = escapeHtml(content);
-  const withMentions = escaped.replace(/(^|\s)(@[\p{L}\p{N}_路.-]+)/gu, '$1<span class="mention">$2</span>');
+  const withMentions = escaped.replace(/(^|\s)(@[\p{L}\p{N}_·.-]+)/gu, '$1<span class="mention">$2</span>');
   return withMentions.replace(/\n/g, '<br/>');
 }
 
@@ -259,7 +259,21 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
   const ref = useRefChat(null);
   const fileRef = useRefChat(null);
   const stopTypingRef = useRefChat(null);
-  const mentionOptions = members.slice(0, 8);
+  // @ 补全候选：只输入 @ 时展示 bot + 在线用户（都没有则退回全员）；
+  // 继续输入时在全部成员里按名字过滤（离线的也能 @，对方上线后能看到）
+  const mentionQueryMatch = val.match(/@([\p{L}\p{N}_·.-]*)$/u);
+  const mentionQuery = mentionQueryMatch ? mentionQueryMatch[1] : null;
+  let mentionOptions = [];
+  if (mentionQuery !== null) {
+    const q = mentionQuery.toLowerCase();
+    if (q) {
+      mentionOptions = members.filter(m => (m.name || '').toLowerCase().includes(q));
+    } else {
+      mentionOptions = members.filter(m => m.isBot || ['online', 'idle', 'dnd'].includes(m.status));
+      if (!mentionOptions.length) mentionOptions = members;
+    }
+    mentionOptions = mentionOptions.slice(0, 10);
+  }
 
   React.useEffect(() => {
     if (!pendingMention?.name) return;
@@ -361,7 +375,7 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
   const insertMention = () => {
     const member = mentionOptions[mentionIndex];
     if (!member) return;
-    setVal(prev => prev.replace(/@[\p{L}\p{N}_路.-]*$/u, '@' + member.name + ' '));
+    setVal(prev => prev.replace(/@[\p{L}\p{N}_·.-]*$/u, '@' + member.name + ' '));
     setMentionOpen(false);
   };
 
@@ -371,17 +385,18 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
       fileRef.current?.click();
       return;
     }
-    if (mentionOpen && e.key === 'ArrowDown') {
+    const mentionActive = mentionOpen && mentionOptions.length > 0;
+    if (mentionActive && e.key === 'ArrowDown') {
       e.preventDefault();
       setMentionIndex(i => Math.min(i + 1, mentionOptions.length - 1));
       return;
     }
-    if (mentionOpen && e.key === 'ArrowUp') {
+    if (mentionActive && e.key === 'ArrowUp') {
       e.preventDefault();
       setMentionIndex(i => Math.max(i - 1, 0));
       return;
     }
-    if (mentionOpen && e.key === 'Enter') {
+    if (mentionActive && e.key === 'Enter') {
       e.preventDefault();
       insertMention();
       return;
@@ -399,7 +414,7 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
   const onChange = (e) => {
     const next = e.target.value;
     setVal(next);
-    setMentionOpen(/@[\p{L}\p{N}_路.-]*$/u.test(next) && mentionOptions.length > 0);
+    setMentionOpen(/@[\p{L}\p{N}_·.-]*$/u.test(next));
     setMentionIndex(0);
     API.sendTyping(true);
     if (stopTypingRef.current) window.clearTimeout(stopTypingRef.current);
@@ -430,7 +445,7 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
         <span><span className="typing-dots"><i/><i/><i/></span><em style={{ fontStyle: 'italic', fontFamily: 'var(--ff-serif)' }}>{uploadError || error || (uploading ? '图片上传中...' : typingText) || ''}</em></span>
         <span>{sendMode === 'ctrl-enter' ? 'Ctrl / Cmd + Enter 发送' : 'Shift + Enter 换行'}</span>
       </div>
-      {mentionOpen && (
+      {mentionOpen && mentionOptions.length > 0 && (
         <div className="mention-popover">
           {mentionOptions.map((member, index) => (
             <div key={member.id || member.name} className={index === mentionIndex ? 'active' : ''} onMouseDown={e => {

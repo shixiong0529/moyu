@@ -384,7 +384,7 @@ function UserCard({ user, onOpenSettings, onOpenProfile, onOpenTelegram, muted, 
   );
 }
 
-function MemberSidebar({ members, onOpenMember }) {
+function MemberSidebar({ members, onOpenMember, onMentionMember }) {
   const list = members?.length ? members : MEMBERS;
   return (
     <div className="member-sidebar">
@@ -398,10 +398,15 @@ function MemberSidebar({ members, onOpenMember }) {
             <div
               key={m.id}
               className={`member-item ${m.status === 'offline' ? 'offline' : ''} ${m.isBot ? 'bot-member' : ''} ${m.isBot && !m.botIsRunning ? 'bot-stopped' : ''}`}
-              title={m.handle || (m.username ? '@' + m.username : '')}
-              onClick={(e) => onOpenMember(m, e)}
+              title={`${m.handle || (m.username ? '@' + m.username : '')} · 点击提及，点头像看资料`}
+              onClick={(e) => (onMentionMember ? onMentionMember(m) : onOpenMember(m, e))}
             >
-              <div className={`avatar ${m.avatar_url ? '' : m.color}`} style={{ position: 'relative' }}>
+              <div
+                className={`avatar ${m.avatar_url ? '' : m.color}`}
+                style={{ position: 'relative', cursor: 'pointer' }}
+                title="查看资料"
+                onClick={(e) => { e.stopPropagation(); onOpenMember(m, e); }}
+              >
                 {m.avatar_url
                   ? <img src={API.assetUrl(m.avatar_url)} alt={m.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', display: 'block' }} />
                   : null}
