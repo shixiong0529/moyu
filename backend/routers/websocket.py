@@ -87,6 +87,22 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+def effective_status(user: User) -> str:
+    """按 WebSocket 实时连接计算用户的有效在线状态。
+
+    数据库里的 status 只在登录/登出时写入：直接关掉浏览器的用户会永远显示"在线"。
+    前端登录后始终保持一条 /ws/dm 连接，因此用它作为真实在线信号：
+    - 无任何连接 → 离线（不管库里存的是什么）
+    - 有连接 → 尊重用户自选的 idle/dnd，否则视为在线
+    机器人不走这里（成员列表按 bot 进程运行状态单独展示）。
+    """
+    if user.is_bot:
+        return user.status or "offline"
+    if not manager.user_connections.get(user.id):
+        return "offline"
+    return user.status if user.status in ("idle", "dnd") else "online"
+
+
 def user_from_token(token: str) -> User | None:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])

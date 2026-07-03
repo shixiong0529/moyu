@@ -7,7 +7,7 @@ from auth import get_current_user
 from database import get_db
 from models import DirectMessage, User
 from schemas import DMCreateRequest
-from routers.websocket import manager
+from routers.websocket import effective_status, manager
 from telegram_service import notify as tg_notify
 
 router = APIRouter(prefix="/api/dm", tags=["dm"])
@@ -20,7 +20,7 @@ def user_to_dict(user: User) -> dict:
         "display_name": user.display_name,
         "avatar_color": user.avatar_color,
         "avatar_url": user.avatar_url,
-        "status": user.status,
+        "status": effective_status(user),
         "bio": user.bio,
         "created_at": user.created_at,
     }

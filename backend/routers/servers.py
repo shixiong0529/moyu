@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from auth import get_current_user
 from database import get_db
 from models import Bot, Channel, ChannelGroup, DirectMessage, Friendship, Invite, JoinRequest, Message, PinnedMessage, Reaction, Server, ServerMember, User
-from routers.websocket import manager
+from routers.websocket import effective_status, manager
 from schemas import (
     ChannelCreateRequest,
     ChannelGroupCreateRequest,
@@ -133,7 +133,7 @@ def user_to_dict(user: User) -> dict:
         "display_name": user.display_name,
         "avatar_color": user.avatar_color,
         "avatar_url": user.avatar_url,
-        "status": user.status,
+        "status": effective_status(user),
         "bio": user.bio,
         "is_bot": user.is_bot,
         "created_at": user.created_at,
@@ -477,7 +477,7 @@ def join_request_to_dict(join_request: JoinRequest) -> dict:
             "display_name": user.display_name,
             "avatar_color": user.avatar_color,
             "avatar_url": user.avatar_url,
-            "status": user.status,
+            "status": effective_status(user),
             "bio": user.bio,
         } if user else None,
     }
@@ -627,7 +627,7 @@ def list_members(server_id: int, current_user: User = Depends(get_current_user),
                 "display_name": member.user.display_name,
                 "avatar_color": member.user.avatar_color,
                 "avatar_url": member.user.avatar_url,
-                "status": member.user.status,
+                "status": effective_status(member.user),
                 "bio": member.user.bio,
                 "pronouns": member.user.pronouns,
                 "is_bot": member.user.is_bot,

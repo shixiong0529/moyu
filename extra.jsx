@@ -81,13 +81,13 @@ function DMView({ dm, messages, onSend, onOpenProfile, currentUser, inviteDecisi
         </div>
         <div className="title" style={{ fontSize: 16 }}>{dm.name}</div>
         <div className="topic">
-          {dm.status === 'online' ? 'online' : dm.status === 'idle' ? 'away' : dm.status === 'dnd' ? 'do not disturb' : 'offline'}
+          {dm.status === 'online' ? '在线' : dm.status === 'idle' ? '闲置' : dm.status === 'dnd' ? '请勿打扰' : '离线'}
         </div>
         <div className="actions">
-          <button className="icon-btn" title="Voice call"><Icon name="voice-channel" size={17}/></button>
-          <button className="icon-btn" title="Pinned"><Icon name="pin" size={17}/></button>
-          <button className="icon-btn" title="Add"><Icon name="plus-circle" size={17}/></button>
-          <div className="search-box"><Icon name="search" size={12}/><input placeholder="Search"/></div>
+          <button className="icon-btn" title="语音通话"><Icon name="voice-channel" size={17}/></button>
+          <button className="icon-btn" title="置顶消息"><Icon name="pin" size={17}/></button>
+          <button className="icon-btn" title="添加"><Icon name="plus-circle" size={17}/></button>
+          <div className="search-box"><Icon name="search" size={12}/><input placeholder="搜索"/></div>
         </div>
       </div>
       <div className="messages">
@@ -159,7 +159,7 @@ function FriendsView({ friends = [], requests = [], initialTab = 'all', onAddFri
       </div>
       <div className="friend-main">
         <div className="friend-name">{friend.display_name}</div>
-        <div className="friend-sub">@{friend.username} · {friend.status === 'online' ? '在线' : '离线'}</div>
+        <div className="friend-sub">@{friend.username} · {friend.status === 'online' ? '在线' : friend.status === 'idle' ? '闲置' : friend.status === 'dnd' ? '请勿打扰' : '离线'}</div>
       </div>
       <button className="icon-btn" title="消息" onClick={(e) => { e.stopPropagation(); openDM(friend); }}><Icon name="message-circle" size={16}/></button>
       <div className="friend-menu-wrap">

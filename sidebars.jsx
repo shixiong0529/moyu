@@ -398,6 +398,7 @@ function MemberSidebar({ members, onOpenMember }) {
             <div
               key={m.id}
               className={`member-item ${m.status === 'offline' ? 'offline' : ''} ${m.isBot ? 'bot-member' : ''} ${m.isBot && !m.botIsRunning ? 'bot-stopped' : ''}`}
+              title={m.handle || (m.username ? '@' + m.username : '')}
               onClick={(e) => onOpenMember(m, e)}
             >
               <div className={`avatar ${m.avatar_url ? '' : m.color}`} style={{ position: 'relative' }}>

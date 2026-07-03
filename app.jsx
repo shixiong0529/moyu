@@ -534,22 +534,23 @@ function App() {
           botAutoListensCurrentServer: Boolean(m.user.bot_auto_listens_current_server),
           activity: m.user.bio || '',
         }));
+        const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh');
         const bots = mapped.filter(m => m.isBot).map(m => ({
           ...m,
           status: m.botIsRunning ? 'online' : 'offline',
           activity: '',
-        }));
-        const founders = mapped.filter(m => !m.isBot && m.role === 'founder' && m.status === 'online');
-        const online = mapped.filter(m => !m.isBot && m.role !== 'founder' && m.status === 'online');
-        const dnd = mapped.filter(m => !m.isBot && m.status === 'dnd');
-        const idle = mapped.filter(m => !m.isBot && m.status === 'idle');
-        const offline = mapped.filter(m => !m.isBot && (m.status === 'offline' || !['online','idle','dnd'].includes(m.status)));
+        })).sort(byName);
+        const founders = mapped.filter(m => !m.isBot && m.role === 'founder' && m.status === 'online').sort(byName);
+        const online = mapped.filter(m => !m.isBot && m.role !== 'founder' && m.status === 'online').sort(byName);
+        const dnd = mapped.filter(m => !m.isBot && m.status === 'dnd').sort(byName);
+        const idle = mapped.filter(m => !m.isBot && m.status === 'idle').sort(byName);
+        const offline = mapped.filter(m => !m.isBot && (m.status === 'offline' || !['online','idle','dnd'].includes(m.status))).sort(byName);
         const groups = [];
         if (bots.length) groups.push({ group: '机器人', key: 'bots', items: bots });
         if (founders.length) groups.push({ group: '在线 · 创建者', key: 'online-f', items: founders });
         if (online.length) groups.push({ group: '在线', key: 'online', items: online });
-        if (dnd.length) groups.push({ group: '勿扰', key: 'dnd', items: dnd });
-        if (idle.length) groups.push({ group: '离开', key: 'idle', items: idle });
+        if (dnd.length) groups.push({ group: '请勿打扰', key: 'dnd', items: dnd });
+        if (idle.length) groups.push({ group: '闲置', key: 'idle', items: idle });
         if (offline.length) groups.push({ group: '离线', key: 'offline', items: offline });
         setServerMembers(groups);
       } catch {
