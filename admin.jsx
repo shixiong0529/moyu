@@ -2,6 +2,7 @@
 const BASE = '';
 const TOKEN_KEY = 'hearth-admin-token';
 const REFRESH_KEY = 'hearth-admin-refresh';
+const PAGE_SIZE = 50;
 
 // ─── API client ─────────────────────────────────────────────────
 const api = {
@@ -169,6 +170,19 @@ function SearchBar({ value, onChange, onSearch, placeholder }) {
 function BackBtn({ onClick }) {
   return <div style={{ marginBottom: 16 }}><Btn small onClick={onClick}>← 返回</Btn></div>;
 }
+// 简单翻页：后端返回数组无总数，满页(=PAGE_SIZE)即认为可能还有下一页
+function Pager({ page, setPage, count, loading }) {
+  const hasPrev = page > 0;
+  const hasNext = count >= PAGE_SIZE;
+  if (!hasPrev && !hasNext) return null;
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 16 }}>
+      <Btn small disabled={!hasPrev || loading} onClick={() => setPage(p => Math.max(0, p - 1))}>← 上一页</Btn>
+      <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>第 {page + 1} 页</span>
+      <Btn small disabled={!hasNext || loading} onClick={() => setPage(p => p + 1)}>下一页 →</Btn>
+    </div>
+  );
+}
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('zh-CN') : '-'; }
 function fmtTime(d) { return d ? new Date(d).toLocaleString('zh-CN') : '-'; }
 
@@ -281,7 +295,8 @@ function DashboardPage() {
 function UsersPage({ onNav }) {
   const [q, setQ] = React.useState('');
   const [search, setSearch] = React.useState('');
-  const { loading, data, error } = useAsync(() => api.get(`/api/admin/users?q=${encodeURIComponent(search)}&limit=100`), [search]);
+  const [page, setPage] = React.useState(0);
+  const { loading, data, error } = useAsync(() => api.get(`/api/admin/users?q=${encodeURIComponent(search)}&limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`), [search, page]);
   const cols = [
     { key: 'id', label: 'ID', render: r => <span style={{ color: 'var(--ink-2)', fontSize: 12 }}>{r.id}</span> },
     { key: 'username', label: '用户名' },
@@ -293,9 +308,12 @@ function UsersPage({ onNav }) {
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ margin: '0 0 16px', fontSize: 18 }}>用户管理</h2>
-      <SearchBar value={q} onChange={setQ} onSearch={setSearch} placeholder="搜索用户名 / 显示名" />
+      <SearchBar value={q} onChange={setQ} onSearch={v => { setSearch(v); setPage(0); }} placeholder="搜索用户名 / 显示名" />
       {loading ? <Spinner /> : error ? <Err msg={error} /> : (
-        <Table cols={cols} rows={data || []} onRowClick={r => onNav('user-detail', { userId: r.id })} />
+        <>
+          <Table cols={cols} rows={data || []} onRowClick={r => onNav('user-detail', { userId: r.id })} />
+          <Pager page={page} setPage={setPage} count={(data || []).length} loading={loading} />
+        </>
       )}
     </div>
   );
@@ -353,7 +371,8 @@ function UserDetailPage({ userId, onBack }) {
 function ServersPage({ onNav }) {
   const [q, setQ] = React.useState('');
   const [search, setSearch] = React.useState('');
-  const { loading, data, error } = useAsync(() => api.get(`/api/admin/servers?q=${encodeURIComponent(search)}&limit=100`), [search]);
+  const [page, setPage] = React.useState(0);
+  const { loading, data, error } = useAsync(() => api.get(`/api/admin/servers?q=${encodeURIComponent(search)}&limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`), [search, page]);
   const cols = [
     { key: 'id', label: 'ID', render: r => <span style={{ color: 'var(--ink-2)', fontSize: 12 }}>{r.id}</span> },
     { key: 'name', label: '名称' },
@@ -367,9 +386,12 @@ function ServersPage({ onNav }) {
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ margin: '0 0 16px', fontSize: 18 }}>服务器管理</h2>
-      <SearchBar value={q} onChange={setQ} onSearch={setSearch} placeholder="搜索服务器名" />
+      <SearchBar value={q} onChange={setQ} onSearch={v => { setSearch(v); setPage(0); }} placeholder="搜索服务器名" />
       {loading ? <Spinner /> : error ? <Err msg={error} /> : (
-        <Table cols={cols} rows={data || []} onRowClick={r => onNav('server-detail', { serverId: r.id })} />
+        <>
+          <Table cols={cols} rows={data || []} onRowClick={r => onNav('server-detail', { serverId: r.id })} />
+          <Pager page={page} setPage={setPage} count={(data || []).length} loading={loading} />
+        </>
       )}
     </div>
   );
@@ -441,9 +463,10 @@ function ServerDetailPage({ serverId, onBack }) {
 // ─── Reports ─────────────────────────────────────────────────────
 function ReportsPage({ onNav }) {
   const [statusFilter, setStatusFilter] = React.useState('pending');
+  const [page, setPage] = React.useState(0);
   const { loading, data, error } = useAsync(
-    () => api.get(`/api/admin/reports?status_filter=${statusFilter}&limit=100`),
-    [statusFilter]
+    () => api.get(`/api/admin/reports?status_filter=${statusFilter}&limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`),
+    [statusFilter, page]
   );
   const cols = [
     { key: 'id', label: 'ID' },
@@ -457,12 +480,15 @@ function ReportsPage({ onNav }) {
       <h2 style={{ margin: '0 0 16px', fontSize: 18 }}>举报队列</h2>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         {[['pending', '待处理'], ['resolved', '已处理'], ['dismissed', '已驳回'], ['', '全部']].map(([s, label]) => (
-          <Btn key={s} small onClick={() => setStatusFilter(s)}
+          <Btn key={s} small onClick={() => { setStatusFilter(s); setPage(0); }}
             style={{ opacity: statusFilter === s ? 1 : 0.6 }}>{label}</Btn>
         ))}
       </div>
       {loading ? <Spinner /> : error ? <Err msg={error} /> : (
-        <Table cols={cols} rows={data || []} onRowClick={r => onNav('report-detail', { reportId: r.id })} />
+        <>
+          <Table cols={cols} rows={data || []} onRowClick={r => onNav('report-detail', { reportId: r.id })} />
+          <Pager page={page} setPage={setPage} count={(data || []).length} loading={loading} />
+        </>
       )}
     </div>
   );
@@ -513,8 +539,9 @@ function InvitesPage() {
   const [search, setSearch] = React.useState('');
   const [msg, setMsg] = React.useState('');
   const [rev, setRev] = React.useState(0);
-  const url = `/api/admin/invites?limit=100${search ? `&server_id=${search}` : ''}`;
-  const { loading, data, error } = useAsync(() => api.get(url), [search, rev]);
+  const [page, setPage] = React.useState(0);
+  const url = `/api/admin/invites?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}${search ? `&server_id=${search}` : ''}`;
+  const { loading, data, error } = useAsync(() => api.get(url), [search, rev, page]);
 
   async function doRevoke(code) {
     if (!confirm(`撤销邀请码 ${code}？`)) return;
@@ -534,8 +561,13 @@ function InvitesPage() {
     <div style={{ padding: 24 }}>
       <h2 style={{ margin: '0 0 16px', fontSize: 18 }}>邀请码管理</h2>
       <Flash msg={msg} />
-      <SearchBar value={serverId} onChange={setServerId} onSearch={setSearch} placeholder="按服务器 ID 筛选（留空显示全部）" />
-      {loading ? <Spinner /> : error ? <Err msg={error} /> : <Table cols={cols} rows={data || []} />}
+      <SearchBar value={serverId} onChange={setServerId} onSearch={v => { setSearch(v); setPage(0); }} placeholder="按服务器 ID 筛选（留空显示全部）" />
+      {loading ? <Spinner /> : error ? <Err msg={error} /> : (
+        <>
+          <Table cols={cols} rows={data || []} />
+          <Pager page={page} setPage={setPage} count={(data || []).length} loading={loading} />
+        </>
+      )}
     </div>
   );
 }
@@ -544,8 +576,9 @@ function InvitesPage() {
 function JoinRequestsPage() {
   const [serverId, setServerId] = React.useState('');
   const [search, setSearch] = React.useState('');
-  const url = `/api/admin/join-requests?limit=100${search ? `&server_id=${search}` : ''}`;
-  const { loading, data, error } = useAsync(() => api.get(url), [search]);
+  const [page, setPage] = React.useState(0);
+  const url = `/api/admin/join-requests?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}${search ? `&server_id=${search}` : ''}`;
+  const { loading, data, error } = useAsync(() => api.get(url), [search, page]);
   const cols = [
     { key: 'id', label: 'ID' },
     { key: 'server_id', label: '服务器 ID' },
@@ -557,8 +590,13 @@ function JoinRequestsPage() {
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ margin: '0 0 16px', fontSize: 18 }}>加入申请</h2>
-      <SearchBar value={serverId} onChange={setServerId} onSearch={setSearch} placeholder="按服务器 ID 筛选（留空显示全部）" />
-      {loading ? <Spinner /> : error ? <Err msg={error} /> : <Table cols={cols} rows={data || []} />}
+      <SearchBar value={serverId} onChange={setServerId} onSearch={v => { setSearch(v); setPage(0); }} placeholder="按服务器 ID 筛选（留空显示全部）" />
+      {loading ? <Spinner /> : error ? <Err msg={error} /> : (
+        <>
+          <Table cols={cols} rows={data || []} />
+          <Pager page={page} setPage={setPage} count={(data || []).length} loading={loading} />
+        </>
+      )}
     </div>
   );
 }
@@ -568,8 +606,9 @@ const AUDIT_ACTIONS = ['ban_user','unban_user','grant_admin','revoke_admin','del
 
 function AuditLogPage() {
   const [action, setAction] = React.useState('');
-  const url = `/api/admin/audit-logs?limit=100${action ? `&action=${action}` : ''}`;
-  const { loading, data, error } = useAsync(() => api.get(url), [action]);
+  const [page, setPage] = React.useState(0);
+  const url = `/api/admin/audit-logs?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}${action ? `&action=${action}` : ''}`;
+  const { loading, data, error } = useAsync(() => api.get(url), [action, page]);
   const cols = [
     { key: 'id', label: 'ID', render: r => <span style={{ color: 'var(--ink-2)', fontSize: 12 }}>{r.id}</span> },
     { key: 'admin_id', label: '管理员 ID' },
@@ -582,13 +621,18 @@ function AuditLogPage() {
     <div style={{ padding: 24 }}>
       <h2 style={{ margin: '0 0 16px', fontSize: 18 }}>操作日志</h2>
       <div style={{ marginBottom: 16 }}>
-        <select value={action} onChange={e => setAction(e.target.value)}
+        <select value={action} onChange={e => { setAction(e.target.value); setPage(0); }}
           style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid var(--paper-2)', background: 'var(--paper-0)', color: 'var(--ink-0)', fontSize: 14 }}>
           <option value="">全部操作</option>
           {AUDIT_ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
         </select>
       </div>
-      {loading ? <Spinner /> : error ? <Err msg={error} /> : <Table cols={cols} rows={data || []} />}
+      {loading ? <Spinner /> : error ? <Err msg={error} /> : (
+        <>
+          <Table cols={cols} rows={data || []} />
+          <Pager page={page} setPage={setPage} count={(data || []).length} loading={loading} />
+        </>
+      )}
     </div>
   );
 }
