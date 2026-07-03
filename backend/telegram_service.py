@@ -57,8 +57,8 @@ async def test_and_save(user_id: int, bot_token: str, chat_id: int) -> None:
         await _send(
             bot_token,
             chat_id,
-            "✅ <b>Biscord 绑定成功！</b>\n\n"
-            "你的 Biscord 账号已和此 Telegram 关联，\n"
+            "✅ <b>摸鱼社区 绑定成功！</b>\n\n"
+            "你的 摸鱼社区 账号已和此 Telegram 关联，\n"
             "收到好友申请、私信或 @提及 时会在这里推送通知。",
         )
     except ValueError as e:

@@ -18,7 +18,8 @@ class ConnectionManager:
     def __init__(self) -> None:
         self.channel_connections: dict[int, set[WebSocket]] = {}
         self.channel_users: dict[WebSocket, User] = {}
-        self.user_connections: dict[int, WebSocket] = {}
+        # 每个用户可能同时开多个标签页/设备，用 set 存多条 DM 连接，全部广播
+        self.user_connections: dict[int, set[WebSocket]] = {}
         self.dm_users: dict[WebSocket, User] = {}
 
     async def connect_channel(self, channel_id: int, websocket: WebSocket, user: User) -> None:
@@ -34,13 +35,17 @@ class ConnectionManager:
         self.channel_users.pop(websocket, None)
 
     async def connect_dm(self, websocket: WebSocket, user: User) -> None:
-        self.user_connections[user.id] = websocket
+        self.user_connections.setdefault(user.id, set()).add(websocket)
         self.dm_users[websocket] = user
 
     async def disconnect_dm(self, websocket: WebSocket) -> None:
         user = self.dm_users.pop(websocket, None)
-        if user and self.user_connections.get(user.id) is websocket:
-            self.user_connections.pop(user.id, None)
+        if user is not None:
+            connections = self.user_connections.get(user.id)
+            if connections is not None:
+                connections.discard(websocket)
+                if not connections:
+                    self.user_connections.pop(user.id, None)
 
     async def broadcast_to_channel(self, channel_id: int, message: dict) -> None:
         dead: list[WebSocket] = []
@@ -53,12 +58,13 @@ class ConnectionManager:
             await self.disconnect_channel(channel_id, websocket)
 
     async def send_to_user(self, user_id: int, message: dict) -> None:
-        websocket = self.user_connections.get(user_id)
-        if websocket is None:
-            return
-        try:
-            await websocket.send_json(message)
-        except RuntimeError:
+        dead: list[WebSocket] = []
+        for websocket in list(self.user_connections.get(user_id, set())):
+            try:
+                await websocket.send_json(message)
+            except Exception:
+                dead.append(websocket)
+        for websocket in dead:
             await self.disconnect_dm(websocket)
 
 
