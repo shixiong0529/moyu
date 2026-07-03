@@ -30,8 +30,9 @@ source .venv/bin/activate
 python -m alembic upgrade head
 
 sudo systemctl restart biscord
+sleep 5   # 等 uvicorn 完成启动（恢复 bot、schema 检查），否则过早 curl 会误报 502
 sudo systemctl status biscord --no-pager
-curl https://moyu.in/api/health
+curl -s https://moyu.in/api/health; echo
 ```
 
 说明：
