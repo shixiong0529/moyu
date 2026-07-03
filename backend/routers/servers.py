@@ -5,6 +5,7 @@ import secrets
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import case, delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from auth import get_current_user
@@ -402,8 +403,12 @@ async def create_join_request(
 
     if server.join_policy == "open":
         db.add(ServerMember(server_id=server_id, user_id=current_user.id, role="member"))
-        db.commit()
-        return {"status": "member", "server": server_to_dict(server, "member", request=request)}
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+        member = db.scalar(select(ServerMember).where(ServerMember.server_id == server_id, ServerMember.user_id == current_user.id))
+        return {"status": "member", "server": server_to_dict(server, member.role if member else "member", request=request)}
 
     existing_request = db.scalar(
         select(JoinRequest).where(
@@ -422,7 +427,19 @@ async def create_join_request(
         note=payload.note,
     )
     db.add(join_request)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # 并发重复申请：返回已存在的 pending，不重复通知 founder
+        db.rollback()
+        existing_request = db.scalar(
+            select(JoinRequest).where(
+                JoinRequest.server_id == server_id,
+                JoinRequest.user_id == current_user.id,
+                JoinRequest.status == "pending",
+            )
+        )
+        return {"status": "pending", "request": join_request_to_dict(existing_request) if existing_request else None}
     db.refresh(join_request)
 
     # Notify server founder via DM
@@ -796,8 +813,12 @@ async def join_server(
         if invite is not None:
             db.add(ServerMember(server_id=server.id, user_id=current_user.id, role="member"))
             invite.uses += 1
-            db.commit()
-            return server_to_dict(server, "member", request=request)
+            try:
+                db.commit()
+            except IntegrityError:
+                db.rollback()
+            member = db.scalar(select(ServerMember).where(ServerMember.server_id == server.id, ServerMember.user_id == current_user.id))
+            return server_to_dict(server, member.role if member else "member", request=request)
         if server.join_policy == "closed":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="server is not accepting new members")
         if server.join_policy == "approval":
@@ -817,7 +838,22 @@ async def join_server(
                 db.add(existing_request)
                 if invite:
                     invite.uses += 1
-                db.commit()
+                try:
+                    db.commit()
+                except IntegrityError:
+                    db.rollback()
+                    existing_request = db.scalar(
+                        select(JoinRequest).where(
+                            JoinRequest.server_id == server.id,
+                            JoinRequest.user_id == current_user.id,
+                            JoinRequest.status == "pending",
+                        )
+                    )
+                    return {
+                        "status": "pending",
+                        "request": join_request_to_dict(existing_request) if existing_request else None,
+                        "server": server_to_dict(server, request=request),
+                    }
                 db.refresh(existing_request)
                 # Notify server founder via DM
                 founder_member = db.scalar(
@@ -851,8 +887,12 @@ async def join_server(
         db.add(ServerMember(server_id=server.id, user_id=current_user.id, role="member"))
         if invite:
             invite.uses += 1
-        db.commit()
-        return server_to_dict(server, "member", request=request)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+        member = db.scalar(select(ServerMember).where(ServerMember.server_id == server.id, ServerMember.user_id == current_user.id))
+        return server_to_dict(server, member.role if member else "member", request=request)
     return server_to_dict(server, existing.role, request=request)
 
 

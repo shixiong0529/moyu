@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, delete, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from auth import get_current_user
@@ -143,7 +144,25 @@ async def create_friend_request(
 
     item = FriendRequest(requester_id=current_user.id, receiver_id=target.id)
     db.add(item)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # 并发重复申请：唯一约束兜底，返回已存在的 pending
+        db.rollback()
+        existing = db.scalar(
+            select(FriendRequest)
+            .where(
+                or_(
+                    and_(FriendRequest.requester_id == current_user.id, FriendRequest.receiver_id == target.id),
+                    and_(FriendRequest.requester_id == target.id, FriendRequest.receiver_id == current_user.id),
+                ),
+                FriendRequest.status == "pending",
+            )
+            .options(selectinload(FriendRequest.requester), selectinload(FriendRequest.receiver))
+        )
+        if existing is not None:
+            return request_to_dict(existing, current_user.id)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="好友申请已存在")
     item = db.scalar(
         select(FriendRequest)
         .where(FriendRequest.id == item.id)

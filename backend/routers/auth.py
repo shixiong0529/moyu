@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from auth import create_access_token, decode_token, get_current_user, hash_password, make_token_pair, verify_password
@@ -53,7 +54,12 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         password_hash=hash_password(payload.password),
     )
     db.add(user)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # 并发同名注册：唯一约束兜底
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="该用户名已被使用，换一个试试")
 
     # 自动加入所有 auto_join=True 的服务器（含管理员服务器）
     auto_join_servers = db.scalars(

@@ -4,6 +4,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from auth import get_current_user
@@ -358,8 +359,11 @@ async def toggle_reaction(
         db.delete(existing)
     else:
         db.add(Reaction(message_id=message.id, user_id=current_user.id, emoji=payload.emoji))
-    db.commit()
-    db.refresh(message)
+    try:
+        db.commit()
+    except IntegrityError:
+        # 并发重复添加同一表情：唯一约束兜底，最终态就是该表情存在
+        db.rollback()
     message = db.scalar(select(Message).where(Message.id == message_id).options(selectinload(Message.reactions)))
     data = {"message_id": message.id, "reactions": reaction_summary(message, current_user.id)}
     await manager.broadcast_to_channel(message.channel_id, {"type": "reaction.update", "data": jsonable_encoder(data)})
