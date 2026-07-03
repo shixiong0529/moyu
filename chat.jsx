@@ -600,6 +600,7 @@ function ThreadPanel({ rootMessage, replies, onClose, onSendReply }) {
 
 function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, searchValue, setSearchValue, sendError, typingText, currentUser, currentRole, sendMode, pendingMention }) {
   const scrollRef = useRefChat(null);
+  const atBottomRef = useRefChat(true);
   const [pinsOpen, setPinsOpen] = useStateChat(false);
   const [pins, setPins] = useStateChat([]);
   const [threadMessage, setThreadMessage] = useStateChat(null);
@@ -615,9 +616,24 @@ function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, s
     setPins(result);
   };
 
+  // 只有当用户已在底部附近时才自动滚到底，避免翻看历史时被新消息强行拉走
   useEffectChat(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (atBottomRef.current && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
   }, [messages.length]);
+
+  // 切换频道时回到底部
+  useEffectChat(() => {
+    atBottomRef.current = true;
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [channel?.id]);
+
+  const onMessagesScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  };
 
   useEffectChat(function refreshPinsOnChannel() {
     if (pinsOpen) loadPins();
@@ -657,7 +673,7 @@ function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, s
         onTogglePins={() => setPinsOpen(open => !open)}
       />
       {pinsOpen && <PinsPanel pins={pins} onClose={() => setPinsOpen(false)} onUnpin={unpinMessage}/>}
-      <div className="messages" ref={scrollRef}>
+      <div className="messages" ref={scrollRef} onScroll={onMessagesScroll}>
         {messages.map(m => {
           if (m.type === 'intro') return <IntroBlock key={m.id} title={m.title} body={m.body} />;
           if (m.type === 'day') return <div key={m.id} className="day-divider"><span>{m.label}</span></div>;

@@ -856,8 +856,14 @@ async def join_server(
     return server_to_dict(server, existing.role, request=request)
 
 
+async def _disconnect_member_sockets(db: Session, server_id: int, user_id: int) -> None:
+    channel_ids = db.scalars(select(Channel.id).where(Channel.server_id == server_id)).all()
+    if channel_ids:
+        await manager.disconnect_user_channels(user_id, list(channel_ids))
+
+
 @router.delete("/{server_id}/members/me")
-def leave_server(
+async def leave_server(
     server_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -867,6 +873,7 @@ def leave_server(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="founder cannot leave their own server")
     db.delete(member)
     db.commit()
+    await _disconnect_member_sockets(db, server_id, current_user.id)
     return {"ok": True}
 
 
@@ -898,7 +905,7 @@ def update_member_role(
 
 
 @router.delete("/{server_id}/members/{user_id}")
-def remove_member(
+async def remove_member(
     server_id: int,
     user_id: int,
     current_user: User = Depends(get_current_user),
@@ -924,4 +931,6 @@ def remove_member(
     # 清掉该用户在本服务器可能残留的加入申请
     db.execute(delete(JoinRequest).where(JoinRequest.server_id == server_id, JoinRequest.user_id == user_id))
     db.commit()
+    # 即时断开被移出成员在本服务器各频道的 WS，防止其继续收到广播
+    await _disconnect_member_sockets(db, server_id, user_id)
     return {"ok": True}

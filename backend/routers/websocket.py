@@ -57,6 +57,22 @@ class ConnectionManager:
         for websocket in dead:
             await self.disconnect_channel(channel_id, websocket)
 
+    async def disconnect_user_channels(self, user_id: int, channel_ids: list[int]) -> None:
+        """关闭某用户在指定频道上的所有 WS 连接（用于踢人/退群后即时断开）。"""
+        targets: list[tuple[int, WebSocket]] = []
+        for channel_id in channel_ids:
+            for websocket in list(self.channel_connections.get(channel_id, set())):
+                user = self.channel_users.get(websocket)
+                if user is not None and user.id == user_id:
+                    targets.append((channel_id, websocket))
+        for channel_id, websocket in targets:
+            try:
+                await websocket.send_json({"type": "error", "detail": "forbidden"})
+                await websocket.close(code=1008)
+            except Exception:
+                pass
+            await self.disconnect_channel(channel_id, websocket)
+
     async def send_to_user(self, user_id: int, message: dict) -> None:
         dead: list[WebSocket] = []
         for websocket in list(self.user_connections.get(user_id, set())):
