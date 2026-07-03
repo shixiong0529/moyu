@@ -2,7 +2,7 @@
 const BASE = '';
 const TOKEN_KEY = 'hearth-admin-token';
 const REFRESH_KEY = 'hearth-admin-refresh';
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 20;
 
 // ─── API client ─────────────────────────────────────────────────
 const api = {
@@ -97,8 +97,8 @@ function Btn({ onClick, children, danger, ghost, small, active, disabled, type, 
   const cls = ['adm-btn', danger && 'danger', ghost && 'ghost', small && 'small', active && 'active'].filter(Boolean).join(' ');
   return <button type={type || 'button'} onClick={onClick} disabled={disabled} className={cls} title={title}>{children}</button>;
 }
-function Input({ value, onChange, placeholder, onKeyDown, type, style }) {
-  return <input type={type || 'text'} value={value} onChange={onChange} placeholder={placeholder} onKeyDown={onKeyDown}
+function Input({ value, onChange, placeholder, onKeyDown, type, style, disabled }) {
+  return <input type={type || 'text'} value={value} onChange={onChange} placeholder={placeholder} onKeyDown={onKeyDown} disabled={disabled}
     className="adm-input" style={{ flex: 1, ...style }} />;
 }
 function Field({ label, hint, children }) {
@@ -379,11 +379,11 @@ function UserDetailPage({ userId, onBack }) {
 
       <Panel title="账号操作" style={{ marginTop: 20, maxWidth: 640 }}>
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-          <Input value={banReason} onChange={e => setBanReason(e.target.value)} placeholder="封禁原因（必填）" />
-          <Btn danger onClick={() => { if (!banReason.trim()) { showErr('请填写封禁原因'); return; } act(() => api.post(`/api/admin/users/${userId}/ban`, { reason: banReason })); }}>封禁</Btn>
+          <Input value={banReason} onChange={e => setBanReason(e.target.value)} placeholder="封禁原因（必填）" disabled={user.is_banned} />
+          <Btn danger disabled={user.is_banned} onClick={() => { if (!banReason.trim()) { showErr('请填写封禁原因'); return; } act(() => api.post(`/api/admin/users/${userId}/ban`, { reason: banReason })); }}>封禁</Btn>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Btn ghost onClick={() => act(() => api.post(`/api/admin/users/${userId}/unban`))}>解封</Btn>
+          <Btn ghost disabled={!user.is_banned} onClick={() => act(() => api.post(`/api/admin/users/${userId}/unban`))}>解封</Btn>
           <Btn ghost onClick={() => act(() => api.patch(`/api/admin/users/${userId}/admin`, { is_admin: !user.is_admin }))}>
             {user.is_admin ? '撤销管理员' : '提升为管理员'}
           </Btn>
@@ -816,7 +816,8 @@ function BotCreateModal({ onClose, onCreated }) {
 
 function BotsPage({ onNav }) {
   const [rev, setRev] = React.useState(0);
-  const { loading, data: bots, error } = useAsync(() => api.get('/api/admin/bots'), [rev]);
+  const [page, setPage] = React.useState(0);
+  const { loading, data: bots, error } = useAsync(() => api.get(`/api/admin/bots?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`), [rev, page]);
   const [showCreate, setShowCreate] = React.useState(false);
   const [toggling, setToggling] = React.useState({});
   const [flash, showOk, showErr] = useFlash();
@@ -848,7 +849,10 @@ function BotsPage({ onNav }) {
       actions={<Btn onClick={() => setShowCreate(true)}>+ 新建机器人</Btn>}>
       <Flash flash={flash} />
       {loading ? <Spinner /> : error ? <Err msg={error} /> : (
-        <Table cols={cols} rows={bots || []} />
+        <>
+          <Table cols={cols} rows={bots || []} />
+          <Pager page={page} setPage={setPage} count={(bots || []).length} loading={loading} />
+        </>
       )}
       {showCreate && (
         <BotCreateModal

@@ -576,8 +576,13 @@ def _ensure_bot_server_memberships(bot: Bot, db: Session) -> None:
 
 
 @router.get("/bots", response_model=list[BotOut])
-def list_bots(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    bots = db.scalars(select(Bot).order_by(Bot.id)).all()
+def list_bots(
+    offset: int = 0,
+    limit: int = 50,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    bots = db.scalars(select(Bot).order_by(Bot.id).offset(offset).limit(limit)).all()
     result = []
     for bot in bots:
         out = BotOut.model_validate(bot)
