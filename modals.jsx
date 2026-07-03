@@ -1430,10 +1430,13 @@ function ProfileCard({ member, position, onClose, onOpenDM, onMention, viewerRol
             <span className={`status-dot ${member.status || 'online'}`}/>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            {inServer && !isSelf && !member.isBot && onMention && (
+            {inServer && !isSelf && onMention && (
               <button className="btn btn-secondary" onClick={() => { onMention(member); onClose(); }}>@ 提及</button>
             )}
-            <button className="btn btn-secondary" onClick={() => { onOpenDM(member); onClose(); }}>私信</button>
+            {/* bot 不监听私信，只能 @ 提及对话，不显示私信入口 */}
+            {!member.isBot && (
+              <button className="btn btn-secondary" onClick={() => { onOpenDM(member); onClose(); }}>私信</button>
+            )}
           </div>
         </div>
         <div className="profile-body">

@@ -606,18 +606,21 @@ function ThreadPanel({ rootMessage, replies, onClose, onSendReply }) {
   );
 }
 
-function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, searchValue, setSearchValue, sendError, typingText, currentUser, currentRole, sendMode, pendingMention, onLoadMore, hasMore, loadingMore }) {
+function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, searchValue, setSearchValue, sendError, typingText, currentUser, currentRole, sendMode, pendingMention, mentionMembers, onLoadMore, hasMore, loadingMore }) {
   const scrollRef = useRefChat(null);
   const atBottomRef = useRefChat(true);
   const prevHeightRef = useRefChat(null);
   const [pinsOpen, setPinsOpen] = useStateChat(false);
   const [pins, setPins] = useStateChat([]);
   const [threadMessage, setThreadMessage] = useStateChat(null);
-  const members = MEMBERS.flatMap(group => group.items).map(member => ({
-    id: member.id,
-    name: member.name,
-    color: member.color,
-  }));
+  // @ 自动补全的候选：优先用真实成员（app.jsx 传入，含当前频道的 bot），静态预览模式才退回种子数据
+  const members = (mentionMembers && mentionMembers.length > 0)
+    ? mentionMembers
+    : MEMBERS.flatMap(group => group.items).map(member => ({
+        id: member.id,
+        name: member.name,
+        color: member.color,
+      }));
 
   const loadPins = async () => {
     if (!channel?.id || typeof channel.id !== 'number') return;

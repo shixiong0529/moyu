@@ -590,6 +590,14 @@ function App() {
       .filter(group => group.items.length)
   ), [serverMembers, activeChannel?.id, activeChannel?.kind]);
 
+  // 输入框 @ 自动补全用的扁平成员列表（含当前频道可见的 bot），不含自己
+  const mentionMembers = useMemo(() => (
+    visibleServerMembers
+      .flatMap(group => group.items)
+      .filter(m => m.userId !== currentUserDisplay.id)
+      .map(m => ({ id: m.id, name: m.name, color: m.color }))
+  ), [visibleServerMembers, currentUserDisplay.id]);
+
   useEffectApp(function loadChannelMessages() {
     if (authStatus !== 'authenticated' || isDM || !activeChannel?.id || typeof activeChannel.id !== 'number') return;
     let cancelled = false;
@@ -1206,6 +1214,7 @@ function App() {
           currentRole={activeServer?.role}
           sendMode={sendMode}
           pendingMention={pendingMention}
+          mentionMembers={mentionMembers}
           onLoadMore={loadMoreChannelMessages}
           hasMore={Boolean(channelHasMore[channelKey])}
           loadingMore={loadingMore}
