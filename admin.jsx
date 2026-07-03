@@ -6,19 +6,47 @@ const REFRESH_KEY = 'hearth-admin-refresh';
 // ─── API client ─────────────────────────────────────────────────
 const api = {
   _token: () => localStorage.getItem(TOKEN_KEY),
-  async _req(method, path, body) {
+  async _refresh() {
+    const rt = localStorage.getItem(REFRESH_KEY);
+    if (!rt) return false;
+    try {
+      const res = await fetch(BASE + '/api/auth/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: rt }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      localStorage.setItem(TOKEN_KEY, data.access_token);
+      if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token);
+      return true;
+    } catch { return false; }
+  },
+  _logout() {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
+    window.location.reload();
+  },
+  async _req(method, path, body, retry = true) {
     const res = await fetch(BASE + path, {
       method,
       headers: {
         'Content-Type': 'application/json',
-        ...(this._token() ? { Authorization: `Bearer ${this._token()}` } : {}),
+        ...(api._token() ? { Authorization: `Bearer ${api._token()}` } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
     if (res.status === 401) {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(REFRESH_KEY);
-      window.location.reload();
+      if (path.startsWith('/api/auth/')) {
+        // 登录/刷新失败：抛错交给调用方展示，不触发登出/刷新
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || res.statusText);
+      }
+      // access token 过期时先尝试用 refresh token 续期并重试，失败才登出
+      if (retry && await api._refresh()) {
+        return api._req(method, path, body, false);
+      }
+      api._logout();
       return;
     }
     if (!res.ok) {
@@ -311,7 +339,7 @@ function UserDetailPage({ userId, onBack }) {
         </div>
         <div style={{ marginTop: 8, paddingTop: 16, borderTop: '1px solid var(--paper-2)' }}>
           <Btn danger onClick={async () => {
-            if (!confirm(`确认永久删除用户「${user.username}」？\n此操作不可撤销，用户的消息将被软删除，所属服务器将被删除。`)) return;
+            if (!confirm(`确认永久删除用户「${user.username}」？\n此操作不可撤销：其消息、私信、好友关系将被永久删除，其创建的服务器将被删除。`)) return;
             try { await api.del(`/api/admin/users/${userId}`); onBack(); }
             catch (e) { setMsg(e.message); }
           }}>永久删除用户</Btn>
@@ -536,7 +564,7 @@ function JoinRequestsPage() {
 }
 
 // ─── Audit Logs ──────────────────────────────────────────────────
-const AUDIT_ACTIONS = ['ban_user','unban_user','grant_admin','revoke_admin','delete_server','toggle_recommended','delete_channel','delete_channel_group','resolve_report','dismiss_report','revoke_invite'];
+const AUDIT_ACTIONS = ['ban_user','unban_user','grant_admin','revoke_admin','delete_user','delete_server','toggle_recommended','update_server_settings','delete_channel','delete_channel_group','resolve_report','dismiss_report','revoke_invite','create_bot','update_bot','delete_bot','start_bot','stop_bot'];
 
 function AuditLogPage() {
   const [action, setAction] = React.useState('');

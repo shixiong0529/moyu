@@ -577,7 +577,13 @@ def _ensure_bot_server_memberships(bot: Bot, db: Session) -> None:
 
 @router.get("/bots", response_model=list[BotOut])
 def list_bots(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    return db.scalars(select(Bot).order_by(Bot.id)).all()
+    bots = db.scalars(select(Bot).order_by(Bot.id)).all()
+    result = []
+    for bot in bots:
+        out = BotOut.model_validate(bot)
+        out.is_active = _bot_is_running(bot.id)  # 以实际 runner 状态为准，避免状态漂移
+        result.append(out)
+    return result
 
 
 @router.post("/bots", response_model=BotOut, status_code=201)
@@ -611,7 +617,9 @@ def get_bot(bot_id: int, admin: User = Depends(require_admin), db: Session = Dep
     bot = db.get(Bot, bot_id)
     if bot is None:
         raise HTTPException(status_code=404, detail="bot not found")
-    return bot
+    out = BotOut.model_validate(bot)
+    out.is_active = _bot_is_running(bot_id)  # 以实际 runner 状态为准
+    return out
 
 
 @router.patch("/bots/{bot_id}", response_model=BotOut)
@@ -696,6 +704,7 @@ async def start_bot(bot_id: int, admin: User = Depends(require_admin), db: Sessi
     running_bots[bot_id] = runner
     runner.start()
     bot.is_active = True
+    write_audit(db, admin.id, "start_bot", "bot", bot_id, {"username": bot.username})
     db.commit()
     return OkResponse(ok=True)
 
@@ -710,6 +719,7 @@ async def stop_bot(bot_id: int, admin: User = Depends(require_admin), db: Sessio
         await running_bots[bot_id].stop()
         running_bots.pop(bot_id, None)
     bot.is_active = False
+    write_audit(db, admin.id, "stop_bot", "bot", bot_id, {"username": bot.username})
     db.commit()
     return OkResponse(ok=True)
 
