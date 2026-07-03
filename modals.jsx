@@ -139,11 +139,10 @@ function CreateServerModal({ onClose, onCreated }) {
           ? `已提交 ${pendingIds.length} 个加入申请；已加入邀请服务器，正在进入...`
           : '已加入，正在进入服务器...');
         await onCreated?.(joinedServer);
-        onClose();
-        return;
+      } else if (pendingIds.length > 0) {
+        setStatusText(`已提交 ${pendingIds.length} 个加入申请，请等待管理员审核。`);
       }
-
-      setStatusText(`已提交 ${pendingIds.length} 个加入申请，请等待管理员审核。`);
+      onClose();
     } catch (err) {
       setError(err.message || '提交失败，请检查邀请链接或稍后重试');
     } finally {

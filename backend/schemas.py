@@ -95,7 +95,7 @@ class ChannelUpdateRequest(BaseModel):
 
 class InviteCreateRequest(BaseModel):
     max_uses: int | None = Field(default=None, ge=1, le=1000)
-    expires_hours: int | None = Field(default=None, ge=1, le=720)
+    expires_hours: int | None = Field(default=24, ge=1, le=720)
 
 
 class ServerFriendInviteRequest(BaseModel):

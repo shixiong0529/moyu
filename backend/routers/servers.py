@@ -401,15 +401,7 @@ async def create_join_request(
     if server.join_policy == "closed":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="server is not accepting new members")
 
-    if server.join_policy == "open":
-        db.add(ServerMember(server_id=server_id, user_id=current_user.id, role="member"))
-        try:
-            db.commit()
-        except IntegrityError:
-            db.rollback()
-        member = db.scalar(select(ServerMember).where(ServerMember.server_id == server_id, ServerMember.user_id == current_user.id))
-        return {"status": "member", "server": server_to_dict(server, member.role if member else "member", request=request)}
-
+    # open/approval 一律进入待审核队列，由目标服务器管理者审核后才能加入
     existing_request = db.scalar(
         select(JoinRequest).where(
             JoinRequest.server_id == server_id,
@@ -781,9 +773,9 @@ async def join_server(
     invite = db.scalar(select(Invite).where(Invite.code == code))
     if invite:
         if invite.expires_at and invite.expires_at < datetime.utcnow():
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invite expired")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邀请链接已失效")
         if invite.max_uses is not None and invite.uses >= invite.max_uses:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invite exhausted")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邀请链接使用次数已达上限")
         server = db.get(Server, invite.server_id)
     else:
         # 无有效邀请码时，只允许通过数字ID/名称加入「公开(open)或推荐」的服务器，
@@ -799,7 +791,7 @@ async def join_server(
             server = _joinable(db.scalar(select(Server).where(Server.name == code)))
 
     if server is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid invite code")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邀请链接无效")
 
     existing = db.scalar(
         select(ServerMember).where(
@@ -808,91 +800,72 @@ async def join_server(
         )
     )
     if existing is None:
-        # 持有效邀请码即视为已获授权（founder/成员主动邀请），直接加入，
-        # 不再进入审核队列——避免“被邀请人接受后 founder 还要再审一次”。
-        if invite is not None:
-            db.add(ServerMember(server_id=server.id, user_id=current_user.id, role="member"))
-            invite.uses += 1
+        # 无论邀请链接还是直接加入推荐服务器，一律进入待审核队列，由目标服务器管理者审核，
+        # closed 例外——服务器主动声明不接受新成员，直接拒绝。
+        if server.join_policy == "closed":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="server is not accepting new members")
+        existing_request = db.scalar(
+            select(JoinRequest).where(
+                JoinRequest.server_id == server.id,
+                JoinRequest.user_id == current_user.id,
+                JoinRequest.status == "pending",
+            )
+        )
+        if existing_request is None:
+            existing_request = JoinRequest(
+                server_id=server.id,
+                user_id=current_user.id,
+                note="通过邀请链接申请加入" if invite else None,
+            )
+            db.add(existing_request)
+            if invite:
+                invite.uses += 1
             try:
                 db.commit()
             except IntegrityError:
                 db.rollback()
-            member = db.scalar(select(ServerMember).where(ServerMember.server_id == server.id, ServerMember.user_id == current_user.id))
-            return server_to_dict(server, member.role if member else "member", request=request)
-        if server.join_policy == "closed":
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="server is not accepting new members")
-        if server.join_policy == "approval":
-            existing_request = db.scalar(
-                select(JoinRequest).where(
-                    JoinRequest.server_id == server.id,
-                    JoinRequest.user_id == current_user.id,
-                    JoinRequest.status == "pending",
+                existing_request = db.scalar(
+                    select(JoinRequest).where(
+                        JoinRequest.server_id == server.id,
+                        JoinRequest.user_id == current_user.id,
+                        JoinRequest.status == "pending",
+                    )
+                )
+                return {
+                    "status": "pending",
+                    "request": join_request_to_dict(existing_request) if existing_request else None,
+                    "server": server_to_dict(server, request=request),
+                }
+            db.refresh(existing_request)
+            # Notify server founder via DM
+            founder_member = db.scalar(
+                select(ServerMember).where(
+                    ServerMember.server_id == server.id,
+                    ServerMember.role == "founder",
                 )
             )
-            if existing_request is None:
-                existing_request = JoinRequest(
-                    server_id=server.id,
-                    user_id=current_user.id,
-                    note="通过邀请链接申请加入" if invite else None,
+            if founder_member and founder_member.user_id != current_user.id:
+                dm_content = f"📋 {current_user.display_name}（@{current_user.username}）申请加入「{server.name}」，请前往审核申请。"
+                dm_msg = DirectMessage(
+                    sender_id=current_user.id,
+                    receiver_id=founder_member.user_id,
+                    content=dm_content,
                 )
-                db.add(existing_request)
-                if invite:
-                    invite.uses += 1
-                try:
-                    db.commit()
-                except IntegrityError:
-                    db.rollback()
-                    existing_request = db.scalar(
-                        select(JoinRequest).where(
-                            JoinRequest.server_id == server.id,
-                            JoinRequest.user_id == current_user.id,
-                            JoinRequest.status == "pending",
-                        )
-                    )
-                    return {
-                        "status": "pending",
-                        "request": join_request_to_dict(existing_request) if existing_request else None,
-                        "server": server_to_dict(server, request=request),
-                    }
-                db.refresh(existing_request)
-                # Notify server founder via DM
-                founder_member = db.scalar(
-                    select(ServerMember).where(
-                        ServerMember.server_id == server.id,
-                        ServerMember.role == "founder",
-                    )
+                db.add(dm_msg)
+                db.commit()
+                dm_msg = db.scalar(
+                    select(DirectMessage)
+                    .where(DirectMessage.id == dm_msg.id)
+                    .options(selectinload(DirectMessage.sender), selectinload(DirectMessage.receiver))
                 )
-                if founder_member and founder_member.user_id != current_user.id:
-                    dm_content = f"📋 {current_user.display_name}（@{current_user.username}）通过邀请链接申请加入「{server.name}」，请前往审核申请。"
-                    dm_msg = DirectMessage(
-                        sender_id=current_user.id,
-                        receiver_id=founder_member.user_id,
-                        content=dm_content,
-                    )
-                    db.add(dm_msg)
-                    db.commit()
-                    dm_msg = db.scalar(
-                        select(DirectMessage)
-                        .where(DirectMessage.id == dm_msg.id)
-                        .options(selectinload(DirectMessage.sender), selectinload(DirectMessage.receiver))
-                    )
-                    encoded = jsonable_encoder(dm_to_dict(dm_msg))
-                    await manager.send_to_user(founder_member.user_id, {"type": "dm.new", "data": encoded})
-                    await tg_notify(founder_member.user_id, f"📋 {current_user.display_name} 申请加入「{server.name}」")
-            return {
-                "status": "pending",
-                "request": join_request_to_dict(existing_request),
-                "server": server_to_dict(server, request=request),
-            }
-        db.add(ServerMember(server_id=server.id, user_id=current_user.id, role="member"))
-        if invite:
-            invite.uses += 1
-        try:
-            db.commit()
-        except IntegrityError:
-            db.rollback()
-        member = db.scalar(select(ServerMember).where(ServerMember.server_id == server.id, ServerMember.user_id == current_user.id))
-        return server_to_dict(server, member.role if member else "member", request=request)
+                encoded = jsonable_encoder(dm_to_dict(dm_msg))
+                await manager.send_to_user(founder_member.user_id, {"type": "dm.new", "data": encoded})
+                await tg_notify(founder_member.user_id, f"📋 {current_user.display_name} 申请加入「{server.name}」")
+        return {
+            "status": "pending",
+            "request": join_request_to_dict(existing_request),
+            "server": server_to_dict(server, request=request),
+        }
     return server_to_dict(server, existing.role, request=request)
 
 

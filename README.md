@@ -50,16 +50,16 @@
 ### 服务器（社区）
 - [x] 创建服务器（可上传图标，自动创建默认频道）
 - [x] 发现推荐服务器（公开服务器列表）
-- [x] 通过邀请码加入（支持完整链接、hearth://协议链接、纯码、服务器名）
-- [x] 申请加入（管理员审核模式）
+- [x] 通过邀请码加入（支持完整链接、hearth://协议链接、纯码、服务器名），一律进入待审核队列
+- [x] 申请加入推荐服务器，同样需要目标服务器管理者审核
 - [x] 退出服务器
 - [x] 服务器成员管理（founder / mod / member 三级角色）
-- [x] 生成邀请链接（可设置使用次数和过期时间）
+- [x] 生成邀请链接（可设置使用次数，默认 24 小时后过期；过期或超次数使用会明确提示"邀请链接已失效"）
 - [x] 邀请好友加入：通过私信发送带邀请链接的消息
 - [x] 加入申请的审核（通过 / 拒绝），仅 founder 可操作
 - [x] 加入申请提交时自动向 founder 发送私信通知
 - [x] 服务器设置（founder 可修改名称、缩写、颜色、图标、描述）
-- [x] 加入策略（open 自由加入 / approval 需要审核 / closed 禁止加入）
+- [x] 加入策略（`closed` 禁止加入；`open`/`approval` 均需目标服务器管理者审核后才能加入）
 - [x] 删除服务器（需输入名称二次确认，仅 founder）
 
 ### 频道
@@ -105,6 +105,17 @@
 - [x] 置顶消息同步
 - [x] 好友申请 / 通过 / 删除事件
 - [x] 新私信即时推送
+
+### 管理后台
+- [x] 独立管理端页面（`/admin.html`），需 `is_admin=true`
+- [x] 概览统计（用户数 / 服务器数 / 频道数 / 消息数 / 今日新增 / 待处理举报）
+- [x] 用户管理：搜索、封禁（需填写原因，同步踢出该用户所有在线连接）、解封、设置/撤销管理员、永久删除；封禁与解封按钮根据当前状态互斥禁用，避免误触
+- [x] 服务器管理：搜索、强制删除、设为推荐、设置新用户默认加入及加入顺序、频道与分组管理
+- [x] 举报队列：按状态筛选（待处理 / 已处理 / 已驳回），一键处置被举报的消息 / 用户 / 服务器并自动标记已处理
+- [x] 邀请码管理：按服务器筛选、撤销
+- [x] 加入申请记录查询
+- [x] 操作日志：管理员敏感操作审计，按 action 筛选
+- [x] 所有列表页统一分页，每页 20 条
 
 ### AI 机器人
 - [x] 在管理后台创建 AI bot，配置用户名、显示名、密码
@@ -363,10 +374,12 @@ Authorization: Bearer <access_token>
 | GET | `/servers/{id}` | 服务器详情（含频道列表、owner 信息） |
 | GET | `/servers/{id}/members` | 成员列表（mod+） |
 | DELETE | `/servers/{id}/members/me` | 退出服务器 |
+| PATCH | `/servers/{id}/members/{uid}` | 设置成员角色 mod/member（仅 founder） |
+| DELETE | `/servers/{id}/members/{uid}` | 移出成员（founder 可移除任何人，mod 只能移除普通成员） |
 | POST | `/servers/{id}/invite` | 生成邀请码（任意成员可操作） |
 | POST | `/servers/{id}/invite-friend` | 向好友发送私信邀请（含邀请链接） |
-| POST | `/servers/join` | 通过邀请码加入，按 join_policy 处理 |
-| POST | `/servers/{id}/join-requests` | 申请加入（审核模式），自动通知 founder |
+| POST | `/servers/join` | 通过邀请码 / 服务器ID / 服务器名加入，非 closed 一律进入待审队列并通知 founder |
+| POST | `/servers/{id}/join-requests` | 申请加入推荐服务器，非 closed 一律进入待审队列并通知 founder |
 | GET | `/servers/{id}/join-requests` | 查看待审申请（仅 founder） |
 | POST | `/servers/{id}/join-requests/{rid}/approve` | 通过申请（仅 founder） |
 | POST | `/servers/{id}/join-requests/{rid}/reject` | 拒绝申请（仅 founder） |
@@ -375,10 +388,11 @@ Authorization: Bearer <access_token>
 
 #### 加入策略（join_policy）
 
+无论通过邀请链接还是直接申请加入推荐服务器，都需要目标服务器管理者审核；`open` 与 `approval` 目前行为一致，仅 `closed` 会直接拒绝。
+
 | 值 | 行为 |
 |----|------|
-| `open` | 任何人通过推荐列表或邀请链接可直接加入 |
-| `approval` | 申请或接受邀请后进入待审队列，founder 审核通过才能加入，同时向 founder 发送私信通知 |
+| `open` / `approval` | 申请或使用邀请链接后进入待审队列，founder 审核通过才能加入，同时向 founder 发送私信通知 |
 | `closed` | 拒绝所有新成员加入 |
 
 ### 频道与消息
@@ -434,17 +448,41 @@ Authorization: Bearer <access_token>
 
 ### 管理后台（需 `is_admin=true`）
 
+所有列表类接口均支持 `limit` + `offset` 分页（默认 `limit=50`）；管理后台前端（admin.jsx）统一按每页 20 条请求并翻页。
+
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/admin/stats` | 概览统计 |
-| GET/PATCH/DELETE | `/api/admin/users/{id}` | 用户管理（封禁/解封/设管理员/删除） |
-| GET/DELETE | `/api/admin/servers/{id}` | 服务器管理 |
-| GET | `/api/admin/bots` | Bot 列表 |
-| POST | `/api/admin/bots` | 新建 bot（自动注册账号） |
+| GET | `/api/admin/users?q=&limit=&offset=` | 用户列表（按用户名/显示名搜索） |
+| GET | `/api/admin/users/{id}` | 用户详情 |
+| POST | `/api/admin/users/{id}/ban` | 封禁用户（需填写原因，同时踢出所有在线连接） |
+| POST | `/api/admin/users/{id}/unban` | 解封用户 |
+| PATCH | `/api/admin/users/{id}/admin` | 设置/撤销管理员 |
+| DELETE | `/api/admin/users/{id}` | 永久删除用户（级联清理消息/私信/好友关系，其创建的服务器一并删除） |
+| GET | `/api/admin/servers?q=&limit=&offset=` | 服务器列表（按名称搜索） |
+| GET | `/api/admin/servers/{id}` | 服务器详情 |
+| DELETE | `/api/admin/servers/{id}` | 强制删除服务器 |
+| PATCH | `/api/admin/servers/{id}/recommended` | 切换推荐状态 |
+| PATCH | `/api/admin/servers/{id}/admin-settings` | 设置新用户默认加入 / 加入顺序 |
+| GET | `/api/admin/servers/{id}/channels` | 服务器频道列表 |
+| DELETE | `/api/admin/channels/{id}` | 删除频道 |
+| DELETE | `/api/admin/channel-groups/{id}` | 删除频道分组（自动把频道移交到同服务器另一分组，仅剩一个分组时拒绝） |
+| GET | `/api/admin/reports?status_filter=&limit=&offset=` | 举报队列（`pending`/`resolved`/`dismissed`，留空查全部） |
+| GET | `/api/admin/reports/{id}` | 举报详情 |
+| POST | `/api/admin/reports/{id}/resolve` | 标记已处理（可附备注） |
+| POST | `/api/admin/reports/{id}/dismiss` | 驳回举报 |
+| GET | `/api/admin/invites?server_id=&limit=&offset=` | 邀请码列表 |
+| DELETE | `/api/admin/invites/{code}` | 撤销邀请码 |
+| GET | `/api/admin/join-requests?server_id=&limit=&offset=` | 加入申请记录 |
+| GET | `/api/admin/audit-logs?action=&limit=&offset=` | 管理员操作审计日志 |
+| GET | `/api/admin/bots?limit=&offset=` | Bot 列表（状态以实际运行中的 runner 为准） |
+| POST | `/api/admin/bots` | 新建 bot（自动注册账号，LLM API Key 加密存储） |
 | GET/PATCH/DELETE | `/api/admin/bots/{id}` | Bot 详情/修改/删除 |
 | POST | `/api/admin/bots/{id}/start` | 启动 bot |
 | POST | `/api/admin/bots/{id}/stop` | 停止 bot |
 | GET | `/api/admin/bots/{id}/available-channels` | 可选文字频道列表 |
+
+管理后台涉及的敏感操作（封禁/解封/授权/删除/推荐/bot 启停等）均写入 `audit_logs`，可在「操作日志」页按 action 筛选查看。
 
 ---
 
