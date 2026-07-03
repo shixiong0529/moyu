@@ -526,27 +526,23 @@ def approve_join_request(
         except IntegrityError:
             # 已存在成员记录（并发审核或用户已通过其他途径加入），忽略即可
             db.rollback()
-            existing_member = db.scalar(
-                select(ServerMember).where(
-                    ServerMember.server_id == server_id,
-                    ServerMember.user_id == join_request.user_id,
-                )
-            )
 
-    if existing_member is not None:
-        # 用户已经是成员：说明这条申请是历史遗留的重复申请（同一用户/服务器的另一条
-        # 申请已经被批准过）。(server_id,user_id,status) 上有唯一约束，不能把这条也
-        # 标记成 approved，否则会撞库；这条申请本身已经没有意义，直接清理掉。
+    join_request.status = "approved"
+    join_request.decided_by = current_user.id
+    join_request.decided_at = datetime.utcnow()
+    try:
+        db.commit()
+    except IntegrityError:
+        # 同一用户/服务器已有另一条历史 approved 记录（例如用户曾经加入过又退出/被移除，
+        # 旧申请记录未清理）：撞上 (server_id,user_id,status) 唯一约束。这条新申请的
+        # 实际目的（把用户加入服务器）已经通过上面的 ServerMember 写入达成，这条申请
+        # 记录本身已经没有意义，直接清理掉。
+        db.rollback()
         result = join_request_to_dict(join_request)
         result["status"] = "approved"
         db.delete(join_request)
         db.commit()
         return result
-
-    join_request.status = "approved"
-    join_request.decided_by = current_user.id
-    join_request.decided_at = datetime.utcnow()
-    db.commit()
     db.refresh(join_request)
     return join_request_to_dict(join_request)
 
