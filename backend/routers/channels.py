@@ -248,6 +248,10 @@ async def create_message(
     db: Session = Depends(get_db),
 ):
     channel = require_channel_member(db, channel_id, current_user.id)
+    if channel.kind == "announce":
+        member = get_server_member(db, channel.server_id, current_user.id)
+        if member is None or member.role not in {"founder", "mod"}:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有管理员可以在公告频道发布消息")
     if payload.reply_to_id is not None:
         parent = db.get(Message, payload.reply_to_id)
         if parent is None or parent.channel_id != channel_id:

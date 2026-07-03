@@ -1384,7 +1384,7 @@ function ConfirmLeaveServerModal({ server, onClose, onConfirm }) {
 }
 
 /* Profile card popover, positioned by caller */
-function ProfileCard({ member, position, onClose, onOpenDM }) {
+function ProfileCard({ member, position, onClose, onOpenDM, onMention, viewerRole, serverId, currentUserId, onSetMemberRole, onKickMember }) {
   const roleLabels = {
     founder: '创建者',
     mod: '管理员',
@@ -1400,6 +1400,14 @@ function ProfileCard({ member, position, onClose, onOpenDM }) {
   const roleLabel = roleLabels[member.role] || '';
   const pronounLabel = member.pronouns && member.pronouns !== 'private' ? pronounLabels[member.pronouns] : '';
   const profileMeta = [roleLabel, pronounLabel].filter(Boolean).join(' · ');
+
+  const inServer = typeof serverId === 'number';
+  const isSelf = member.userId && member.userId === currentUserId;
+  const targetFounder = member.role === 'founder';
+  const canManage = inServer && Boolean(member.userId) && !isSelf && !targetFounder;
+  const canSetRole = canManage && viewerRole === 'founder' && !member.isBot;
+  const canKick = canManage && (viewerRole === 'founder' || (viewerRole === 'mod' && member.role === 'member'));
+
   const style = {
     position: 'fixed',
     left: Math.min(position.x, window.innerWidth - 340),
@@ -1422,7 +1430,12 @@ function ProfileCard({ member, position, onClose, onOpenDM }) {
             {member.avatar_url && <img src={API.assetUrl(member.avatar_url)} alt={member.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', display: 'block' }} />}
             <span className={`status-dot ${member.status || 'online'}`}/>
           </div>
-          <button className="btn btn-secondary" onClick={() => { onOpenDM(member); onClose(); }}>私信</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {inServer && !isSelf && !member.isBot && onMention && (
+              <button className="btn btn-secondary" onClick={() => { onMention(member); onClose(); }}>@ 提及</button>
+            )}
+            <button className="btn btn-secondary" onClick={() => { onOpenDM(member); onClose(); }}>私信</button>
+          </div>
         </div>
         <div className="profile-body">
           <div className={`name ${member.role ? 'role-'+member.role : ''}`}>{member.name}</div>
@@ -1443,6 +1456,32 @@ function ProfileCard({ member, position, onClose, onOpenDM }) {
                   <span className="dot" style={{ background: `var(--${member.role === 'founder' ? 'rust' : member.role === 'bot' ? 'sage' : 'teal'})` }}/>
                   {roleLabel || member.role}
                 </span>
+              </div>
+            </div>
+          )}
+
+          {(canSetRole || canKick) && (
+            <div className="profile-section">
+              <div className="label">管理</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {canSetRole && (
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => { onSetMemberRole?.(member.userId, member.role === 'mod' ? 'member' : 'mod'); onClose(); }}
+                  >
+                    {member.role === 'mod' ? '取消管理员' : '设为管理员'}
+                  </button>
+                )}
+                {canKick && (
+                  <button
+                    className="btn btn-primary danger"
+                    onClick={() => {
+                      if (window.confirm(`确定将 ${member.name} 移出服务器？`)) { onKickMember?.(member.userId); onClose(); }
+                    }}
+                  >
+                    移出服务器
+                  </button>
+                )}
               </div>
             </div>
           )}

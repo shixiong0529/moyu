@@ -853,10 +853,6 @@ function App() {
   const [pendingMention, setPendingMention] = useStateApp(null);
 
   const handleOpenMember = (m, e) => {
-    if (m && m.name && !isDM) {
-      setPendingMention({ name: m.name, ts: Date.now() });
-      return;
-    }
     const rect = e?.currentTarget?.getBoundingClientRect?.();
     setProfileCard({
       member: m,
@@ -1009,6 +1005,26 @@ function App() {
       }
     } catch (err) {
       alert(err.message || '退出服务器失败');
+    }
+  };
+
+  const handleSetMemberRole = async (userId, role) => {
+    if (typeof activeServerId !== 'number' || !userId) return;
+    try {
+      await API.patch(`/api/servers/${activeServerId}/members/${userId}`, { role });
+      setMembersRefreshKey(value => value + 1);
+    } catch (err) {
+      alert(err.message || '修改角色失败');
+    }
+  };
+
+  const handleKickMember = async (userId) => {
+    if (typeof activeServerId !== 'number' || !userId) return;
+    try {
+      await API.del(`/api/servers/${activeServerId}/members/${userId}`);
+      setMembersRefreshKey(value => value + 1);
+    } catch (err) {
+      alert(err.message || '移出成员失败');
     }
   };
 
@@ -1266,6 +1282,12 @@ function App() {
         <ProfileCard
           member={profileCard.member}
           position={profileCard.position}
+          viewerRole={typeof activeServerId === 'number' ? activeServer?.role : undefined}
+          serverId={typeof activeServerId === 'number' ? activeServerId : undefined}
+          currentUserId={currentUserDisplay.id}
+          onSetMemberRole={handleSetMemberRole}
+          onKickMember={handleKickMember}
+          onMention={(m) => setPendingMention({ name: m.name, ts: Date.now() })}
           onClose={() => setProfileCard(null)}
           onOpenDM={(m) => {
             setActiveServerId('dm');

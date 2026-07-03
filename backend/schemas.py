@@ -68,6 +68,10 @@ class ServerJoinRequest(BaseModel):
     code: str = Field(min_length=1, max_length=64)
 
 
+class MemberRoleUpdateRequest(BaseModel):
+    role: str = Field(pattern=r"^(mod|member)$")
+
+
 class JoinRequestCreateRequest(BaseModel):
     note: str | None = Field(default=None, max_length=256)
 

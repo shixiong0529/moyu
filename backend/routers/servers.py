@@ -20,6 +20,7 @@ from schemas import (
     ServerCreateRequest,
     ServerJoinRequest,
     ServerUpdateRequest,
+    MemberRoleUpdateRequest,
 )
 from telegram_service import notify as tg_notify
 
@@ -865,5 +866,62 @@ def leave_server(
     if member.role == "founder":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="founder cannot leave their own server")
     db.delete(member)
+    db.commit()
+    return {"ok": True}
+
+
+@router.patch("/{server_id}/members/{user_id}")
+def update_member_role(
+    server_id: int,
+    user_id: int,
+    payload: MemberRoleUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """founder 把成员设为管理员(mod)或取消(member)。"""
+    require_founder(db, server_id, current_user.id)
+    if user_id == current_user.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能修改自己的角色")
+    member = db.scalar(
+        select(ServerMember).where(
+            ServerMember.server_id == server_id,
+            ServerMember.user_id == user_id,
+        )
+    )
+    if member is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="member not found")
+    if member.role == "founder":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能修改创建者的角色")
+    member.role = payload.role
+    db.commit()
+    return {"ok": True, "user_id": user_id, "role": member.role}
+
+
+@router.delete("/{server_id}/members/{user_id}")
+def remove_member(
+    server_id: int,
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """founder/mod 把成员移出服务器。mod 只能移出普通成员。"""
+    actor = require_manager(db, server_id, current_user.id)
+    if user_id == current_user.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请使用退出服务器")
+    target = db.scalar(
+        select(ServerMember).where(
+            ServerMember.server_id == server_id,
+            ServerMember.user_id == user_id,
+        )
+    )
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="member not found")
+    if target.role == "founder":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不能移出创建者")
+    if actor.role == "mod" and target.role != "member":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="管理员只能移出普通成员")
+    db.delete(target)
+    # 清掉该用户在本服务器可能残留的加入申请
+    db.execute(delete(JoinRequest).where(JoinRequest.server_id == server_id, JoinRequest.user_id == user_id))
     db.commit()
     return {"ok": True}
