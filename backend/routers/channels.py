@@ -103,8 +103,17 @@ def message_to_dict(message: Message, current_user_id: int) -> dict:
 def reaction_summary(message: Message, current_user_id: int) -> list[dict]:
     counts = Counter(reaction.emoji for reaction in message.reactions)
     mine = {(reaction.emoji, reaction.user_id) for reaction in message.reactions}
+    users_by_emoji: dict[str, list[int]] = {}
+    for reaction in message.reactions:
+        users_by_emoji.setdefault(reaction.emoji, []).append(reaction.user_id)
     return [
-        {"emoji": emoji, "count": count, "mine": (emoji, current_user_id) in mine}
+        {
+            "emoji": emoji,
+            "count": count,
+            # mine 只对"请求发起者"正确；广播场景下客户端应使用 user_ids 自行判断
+            "mine": (emoji, current_user_id) in mine,
+            "user_ids": users_by_emoji.get(emoji, []),
+        }
         for emoji, count in counts.items()
     ]
 

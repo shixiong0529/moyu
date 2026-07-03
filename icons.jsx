@@ -91,6 +91,9 @@ const Icon = ({ name, size = 16, stroke = 1.5 }) => {
     case 'reply': return (
       <svg {...common}><path d="M10 6L4 12l6 6M4 12h10a6 6 0 0 1 6 6v2"/></svg>
     );
+    case 'edit': return (
+      <svg {...common}><path d="M17 3l4 4L8 20l-5 1 1-5L17 3Z"/></svg>
+    );
     case 'more': return (
       <svg {...common}><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
     );

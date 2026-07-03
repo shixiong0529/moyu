@@ -62,7 +62,7 @@ function ChatHeader({ channel, onToggleMembers, searchValue, setSearchValue, pin
   );
 }
 
-function ContextMenu({ x, y, canEdit, canDelete, canPin, onReact, onEdit, onDelete, onPin, onThread, onClose }) {
+function ContextMenu({ x, y, canEdit, canDelete, canPin, onPickEmoji, onReply, onEdit, onDelete, onPin, onThread, onClose }) {
   useEffectChat(function closeOnEscape() {
     const onKey = e => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -72,7 +72,8 @@ function ContextMenu({ x, y, canEdit, canDelete, canPin, onReact, onEdit, onDele
     <>
       <div style={{ position: 'fixed', inset: 0, zIndex: 300 }} onClick={onClose}/>
       <div className="context-menu" style={{ position: 'fixed', left: x, top: y, zIndex: 310 }}>
-        <button onClick={() => { onReact('📚'); onClose(); }}>表情 📚</button>
+        {onReply && <button onClick={() => { onReply(); onClose(); }}>回复</button>}
+        <button onClick={() => { onPickEmoji(); onClose(); }}>添加表情</button>
         <button onClick={() => { onThread(); onClose(); }}>线索回复</button>
         {canPin && <button onClick={() => { onPin(); onClose(); }}>置顶</button>}
         {canEdit && <button onClick={() => { onEdit(); onClose(); }}>编辑</button>}
@@ -82,10 +83,33 @@ function ContextMenu({ x, y, canEdit, canDelete, canPin, onReact, onEdit, onDele
   );
 }
 
-function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, onOpenThread, currentUser, currentRole, inviteDecision, onAcceptInvite, onRejectInvite }) {
+// 消息表情选择弹层：复用 Composer 的 EMOJI_CATEGORIES 数据
+function ReactionPicker({ onPick, onClose }) {
+  const [category, setCategory] = useStateChat(0);
+  return (
+    <>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 300 }} onClick={onClose}/>
+      <div className="reaction-picker">
+        <div className="reaction-picker-tabs">
+          {EMOJI_CATEGORIES.map((c, i) => (
+            <button key={c.label} className={i === category ? 'active' : ''} title={c.label} onClick={() => setCategory(i)}>{c.icon}</button>
+          ))}
+        </div>
+        <div className="reaction-picker-grid">
+          {EMOJI_CATEGORIES[category].emojis.map(emo => (
+            <button key={emo} onClick={() => { onPick(emo); onClose(); }}>{emo}</button>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, onOpenThread, onReply, compact, currentUser, currentRole, inviteDecision, onAcceptInvite, onRejectInvite }) {
   const [editing, setEditing] = useStateChat(false);
   const [editValue, setEditValue] = useStateChat(msg.content || msg.lines?.join('\n') || '');
   const [menu, setMenu] = useStateChat(null);
+  const [pickerOpen, setPickerOpen] = useStateChat(false);
   const canEdit = msg.authorId === currentUser?.id && !msg.isDeleted;
   const canDelete = !msg.isDeleted && (
     msg.authorId === currentUser?.id ||
@@ -121,9 +145,11 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
     }
   };
 
+  const isCompact = compact && !msg.replyTo && !editing;
+
   return (
     <div
-      className={`msg-group ${msg.isDeleted ? 'deleted' : ''}`}
+      className={`msg-group ${msg.isDeleted ? 'deleted' : ''} ${isCompact ? 'compact' : ''}`}
       onContextMenu={(e) => {
         e.preventDefault();
         setMenu({ x: e.clientX, y: e.clientY });
@@ -138,26 +164,38 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
           </span>
         </div>
       )}
-      <div className="msg-avatar" style={{ marginTop: msg.replyTo ? 18 : 0 }}>
-        <Avatar color={msg.color} url={msg.avatar_url} label={msg.name?.[0] || '?'} size={36} onClick={e => onOpenProfile(msg, e)} kind={msg.bot ? 'bot' : undefined}/>
-      </div>
-      <div className="msg-body" style={{ marginTop: msg.replyTo ? 18 : 0 }}>
-        <div className="msg-head">
-          <span className={`author ${msg.role ? 'role-'+msg.role : ''}`} onClick={e => onOpenProfile(msg, e)}>
-            {msg.name}
-          </span>
-          {msg.bot && <span className="badge-bot">BOT</span>}
-          <span className="time">{msg.time}{msg.isEdited ? ' · 已编辑' : ''}</span>
+      {isCompact ? (
+        // 连续消息：不重复头像和名字，左侧留位 hover 显示时间
+        <div className="msg-avatar compact-time">
+          <span className="inline-time">{msg.time}</span>
         </div>
+      ) : (
+        <div className="msg-avatar" style={{ marginTop: msg.replyTo ? 18 : 0 }}>
+          <Avatar color={msg.color} url={msg.avatar_url} label={msg.name?.[0] || '?'} size={36} onClick={e => onOpenProfile(msg, e)} kind={msg.bot ? 'bot' : undefined}/>
+        </div>
+      )}
+      <div className="msg-body" style={{ marginTop: msg.replyTo ? 18 : 0 }}>
+        {!isCompact && (
+          <div className="msg-head">
+            <span className={`author ${msg.role ? 'role-'+msg.role : ''}`} onClick={e => onOpenProfile(msg, e)}>
+              {msg.name}
+            </span>
+            {msg.bot && <span className="badge-bot">BOT</span>}
+            <span className="time">{msg.time}{msg.isEdited ? ' · 已编辑' : ''}</span>
+          </div>
+        )}
         {editing ? (
-          <textarea
-            className="form-input"
-            style={{ minHeight: 74, padding: 10, resize: 'vertical' }}
-            value={editValue}
-            onChange={e => setEditValue(e.target.value)}
-            onKeyDown={onEditKey}
-            autoFocus
-          />
+          <>
+            <textarea
+              className="form-input"
+              style={{ minHeight: 74, padding: 10, resize: 'vertical' }}
+              value={editValue}
+              onChange={e => setEditValue(e.target.value)}
+              onKeyDown={onEditKey}
+              autoFocus
+            />
+            <div style={{ fontSize: 11, color: 'var(--ink-2)', marginTop: 4 }}>Enter 保存 · Esc 取消</div>
+          </>
         ) : (
           <>
             {displayText && <div className="msg-content" dangerouslySetInnerHTML={{ __html: html }} />}
@@ -202,7 +240,7 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
                 <span>{r.count}</span>
               </span>
             ))}
-            <span className="reaction" onClick={() => onReact(msg.id, '📚')} style={{ opacity: 0.7 }}>
+            <span className="reaction" title="添加表情" onClick={() => setPickerOpen(true)} style={{ opacity: 0.7 }}>
               <Icon name="smile" size={12}/>
             </span>
           </div>
@@ -214,12 +252,20 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
             {item.emo}
           </button>
         ))}
+        <button title="添加表情" aria-label="添加表情" onClick={() => setPickerOpen(true)}><Icon name="smile" size={15}/></button>
+        {onReply && <button title="回复" aria-label="回复" onClick={() => onReply(msg)}><Icon name="reply" size={15}/></button>}
         <button title="线索回复" aria-label="线索回复" onClick={() => onOpenThread(msg)}><Icon name="thread" size={15}/></button>
         {canPin && <button title="置顶消息" aria-label="置顶消息" onClick={() => onPin(msg.id)}><Icon name="pin" size={15}/></button>}
-        {canEdit && <button title="编辑消息" aria-label="编辑消息" onClick={() => setEditing(true)}><Icon name="thread" size={15}/></button>}
-        {canDelete && <button title="删除消息" aria-label="删除消息" onClick={() => onDelete(msg.id)}><Icon name="close" size={15}/></button>}
+        {canEdit && <button title="编辑消息" aria-label="编辑消息" onClick={() => setEditing(true)}><Icon name="edit" size={15}/></button>}
+        {canDelete && <button title="删除消息" aria-label="删除消息" onClick={() => { if (confirm('删除这条消息？')) onDelete(msg.id); }}><Icon name="close" size={15}/></button>}
         <button title="更多操作" aria-label="更多操作" onClick={(e) => setMenu({ x: e.clientX, y: e.clientY })}><Icon name="more" size={15}/></button>
       </div>
+      {pickerOpen && (
+        <ReactionPicker
+          onPick={(emo) => onReact(msg.id, emo)}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
       {menu && (
         <ContextMenu
           x={menu.x}
@@ -227,9 +273,10 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
           canEdit={canEdit}
           canDelete={canDelete}
           canPin={canPin}
-          onReact={(emo) => onReact(msg.id, emo)}
+          onPickEmoji={() => setPickerOpen(true)}
+          onReply={onReply ? () => onReply(msg) : undefined}
           onEdit={() => setEditing(true)}
-          onDelete={() => onDelete(msg.id)}
+          onDelete={() => { if (confirm('删除这条消息？')) onDelete(msg.id); }}
           onPin={() => onPin(msg.id)}
           onThread={() => onOpenThread(msg)}
           onClose={() => setMenu(null)}
@@ -248,7 +295,7 @@ const EMOJI_CATEGORIES = [
   { label: '符号', icon: '🕯', emojis: ['🕯','💭','👀','🎉','🔴','🟠','🟡','🟢','🔵','🟣','⚫','⚪','🟤','💯','❗','❓','💬','🗨️','💤','♻️'] },
 ];
 
-function Composer({ channelName, onSend, error, typingText, members = [], sendMode = 'enter', pendingMention }) {
+function Composer({ channelName, onSend, error, typingText, members = [], sendMode = 'enter', pendingMention, replyTarget, onCancelReply }) {
   const [val, setVal] = useStateChat('');
   const [uploading, setUploading] = useStateChat(false);
   const [uploadError, setUploadError] = useStateChat('');
@@ -445,6 +492,14 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
         <span><span className="typing-dots"><i/><i/><i/></span><em style={{ fontStyle: 'italic', fontFamily: 'var(--ff-serif)' }}>{uploadError || error || (uploading ? '图片上传中...' : typingText) || ''}</em></span>
         <span>{sendMode === 'ctrl-enter' ? 'Ctrl / Cmd + Enter 发送' : 'Shift + Enter 换行'}</span>
       </div>
+      {replyTarget && (
+        <div className="composer-reply-bar">
+          <Icon name="reply" size={13}/>
+          <span>正在回复 <b>{replyTarget.name}</b></span>
+          <span className="reply-preview">{String(replyTarget.content || '').split('\n')[0].slice(0, 60)}</span>
+          <button title="取消回复" onClick={onCancelReply}><Icon name="close" size={13}/></button>
+        </div>
+      )}
       {mentionOpen && mentionOptions.length > 0 && (
         <div className="mention-popover">
           {mentionOptions.map((member, index) => (
@@ -704,6 +759,74 @@ function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, s
     messages.filter(message => message.type === 'message' && message.replyToId === threadMessage?.id)
   ), [messages, threadMessage?.id]);
 
+  // 普通回复：hover 工具栏点"回复"后，输入框上方出现"正在回复"条，发送自动带 reply_to_id
+  const [replyTarget, setReplyTarget] = useStateChat(null);
+  useEffectChat(() => { setReplyTarget(null); }, [channel?.id]);
+  const sendWithReply = async (text, options = {}) => {
+    const opts = replyTarget && typeof replyTarget.id === 'number'
+      ? { reply_to_id: replyTarget.id, ...options }
+      : options;
+    await onSend(text, opts);
+    setReplyTarget(null);
+  };
+
+  // 渲染预处理：组装引用条(replyTo)、连续消息合并(compact)、按日期插入分隔线
+  const renderItems = useMemoChat(() => {
+    const byId = new Map();
+    messages.forEach(m => { if (m.type === 'message') byId.set(m.id, m); });
+    const items = [];
+    let prevMsg = null;
+    let prevDayKey = null;
+    for (const m of messages) {
+      if (m.type !== 'message') {
+        // 静态种子里的 day 分隔线只在没有真实时间数据时保留
+        if (m.type === 'day' && messages.some(x => x.type === 'message' && x.createdAt)) continue;
+        items.push({ kind: 'raw', item: m });
+        prevMsg = null;
+        continue;
+      }
+      // 日期分隔线
+      if (m.createdAt) {
+        const d = new Date(m.createdAt);
+        if (!Number.isNaN(d.getTime())) {
+          const dayKey = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+          if (dayKey !== prevDayKey) {
+            const today = new Date();
+            const yesterday = new Date(today.getTime() - 86400000);
+            const fmt = (x) => x.getFullYear() + '-' + (x.getMonth() + 1) + '-' + x.getDate();
+            const label = dayKey === fmt(today) ? '今天 · TODAY'
+              : dayKey === fmt(yesterday) ? '昨天'
+              : `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+            items.push({ kind: 'raw', item: { id: 'day-' + dayKey, type: 'day', label } });
+            prevDayKey = dayKey;
+            prevMsg = null;
+          }
+        }
+      }
+      // 引用条：按 replyToId 在已加载消息里找原文
+      let replyTo = m.replyTo || null;
+      if (!replyTo && m.replyToId) {
+        const source = byId.get(m.replyToId);
+        if (source) {
+          const text = stripImageLinks(source.content || source.lines?.join('\n') || '');
+          replyTo = { name: source.name, text: text || '[图片]' };
+        } else {
+          replyTo = { name: '', text: '原消息不在当前已加载范围' };
+        }
+      }
+      // 连续消息合并：同作者、5 分钟内、都无引用
+      let compact = false;
+      if (prevMsg && prevMsg.authorId != null && prevMsg.authorId === m.authorId && !replyTo && !m.isDeleted) {
+        const t1 = prevMsg.createdAt ? new Date(prevMsg.createdAt).getTime() : NaN;
+        const t2 = m.createdAt ? new Date(m.createdAt).getTime() : NaN;
+        compact = Number.isFinite(t1) && Number.isFinite(t2) && (t2 - t1) < 5 * 60 * 1000 && t2 >= t1;
+      }
+      items.push({ kind: 'message', item: replyTo && !m.replyTo ? { ...m, replyTo } : m, compact });
+      prevMsg = m;
+    }
+    return items;
+  }, [messages]);
+
   return (
     <div className="chat">
       <ChatHeader
@@ -719,19 +842,24 @@ function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, s
         {loadingMore && (
           <div style={{ textAlign: 'center', padding: '8px 0', color: 'var(--ink-2)', fontSize: 12 }}>加载更早的消息…</div>
         )}
-        {messages.map(m => {
-          if (m.type === 'intro') return <IntroBlock key={m.id} title={m.title} body={m.body} />;
-          if (m.type === 'day') return <div key={m.id} className="day-divider"><span>{m.label}</span></div>;
+        {renderItems.map(({ kind, item, compact }) => {
+          if (kind === 'raw') {
+            if (item.type === 'intro') return <IntroBlock key={item.id} title={item.title} body={item.body} />;
+            if (item.type === 'day') return <div key={item.id} className="day-divider"><span>{item.label}</span></div>;
+            return null;
+          }
           return (
             <MessageGroup
-              key={m.id}
-              msg={m}
+              key={item.id}
+              msg={item}
+              compact={compact}
               onOpenProfile={onOpenProfile}
               onReact={reactMessage}
               onEdit={editMessage}
               onDelete={deleteMessage}
               onPin={pinMessage}
               onOpenThread={setThreadMessage}
+              onReply={typeof item.id === 'number' ? setReplyTarget : undefined}
               currentUser={currentUser}
               currentRole={currentRole}
             />
@@ -746,7 +874,7 @@ function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, s
           onSendReply={(text, rootId) => onSend(text, { reply_to_id: rootId })}
         />
       )}
-      <Composer channelName={channel?.name || ''} onSend={onSend} error={sendError} typingText={typingText} members={members} sendMode={sendMode} pendingMention={pendingMention}/>
+      <Composer channelName={channel?.name || ''} onSend={sendWithReply} error={sendError} typingText={typingText} members={members} sendMode={sendMode} pendingMention={pendingMention} replyTarget={replyTarget} onCancelReply={() => setReplyTarget(null)}/>
     </div>
   );
 }

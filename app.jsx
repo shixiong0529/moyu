@@ -67,6 +67,7 @@ function apiMessageToView(message) {
     isEdited: message.is_edited,
     isDeleted: message.is_deleted,
     time: formatMessageTime(message.created_at),
+    createdAt: message.created_at,
     lines: String(message.content || '').split('\n'),
     reactions: (message.reactions || []).map(reaction => ({
       emo: reaction.emoji,
@@ -693,7 +694,12 @@ function App() {
           ...prev,
           [channelKey]: (prev[channelKey] || []).map(item => item.id === reaction.message_id ? {
             ...item,
-            reactions: (reaction.reactions || []).map(r => ({ emo: r.emoji, count: r.count, mine: r.mine })),
+            // 广播 payload 的 mine 是按操作者视角算的，不能直接用；按 user_ids 判断自己是否点过
+            reactions: (reaction.reactions || []).map(r => ({
+              emo: r.emoji,
+              count: r.count,
+              mine: Array.isArray(r.user_ids) ? r.user_ids.includes(currentUserDisplay.id) : r.mine,
+            })),
           } : item),
         }));
       },
@@ -834,7 +840,7 @@ function App() {
       channelId: activeChannel?.id,
       replyToId: options.reply_to_id,
       content: text,
-      time, lines: String(text).split('\n'), reactions: [], pending: true,
+      time, createdAt: now.toISOString(), lines: String(text).split('\n'), reactions: [], pending: true,
     };
     setSendError('');
     setMessagesByChannel(prev => ({
