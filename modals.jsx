@@ -470,6 +470,107 @@ function CreateGroupModal({ server, onClose, onCreated }) {
   );
 }
 
+function GroupEditModal({ server, group, onClose, onChanged }) {
+  const [name, setName] = useStateM(group?.group || group?.name || '');
+  const [error, setError] = useStateM('');
+  const [loading, setLoading] = useStateM(false);
+  const [deleteLoading, setDeleteLoading] = useStateM(false);
+  const channelCount = group?.items?.length || 0;
+  const originalName = group?.group || group?.name || '';
+
+  const save = async () => {
+    const cleanName = name.trim();
+    if (!cleanName || loading || !server?.id || !group?.id) return;
+    if (cleanName === originalName) { onClose(); return; }
+    setLoading(true);
+    setError('');
+    try {
+      await API.patch(`/api/servers/${server.id}/channel-groups/${group.id}`, { name: cleanName });
+      await onChanged?.();
+      onClose();
+    } catch (err) {
+      setError(err.message || '保存失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const removeGroup = async () => {
+    if (deleteLoading || channelCount || !server?.id || !group?.id) return;
+    setDeleteLoading(true);
+    setError('');
+    try {
+      await API.del(`/api/servers/${server.id}/channel-groups/${group.id}`);
+      await onChanged?.();
+      onClose();
+    } catch (err) {
+      setError(err.message || '删除分组失败');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="编辑分组"
+      subtitle={originalName}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>取消</button>
+          <button className="btn btn-primary" disabled={!name.trim() || loading} onClick={save}>
+            {loading ? '保存中...' : '保存'}
+          </button>
+        </>
+      }
+    >
+      <label className="form-label">分组名称</label>
+      <input
+        className="form-input"
+        value={name}
+        maxLength={64}
+        onChange={e => setName(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            save();
+          }
+        }}
+        autoFocus
+      />
+      {error && <div className="form-hint" style={{ color: 'var(--rust)' }}>{error}</div>}
+
+      <div style={{
+        marginTop: 22,
+        padding: '12px 14px',
+        border: '1px solid rgba(181,88,58,0.35)',
+        background: 'rgba(181,88,58,0.06)',
+        borderRadius: 8,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+      }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--rust)' }}>删除分组</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 2 }}>
+            {channelCount
+              ? `分组内还有 ${channelCount} 个频道，删除或移走后才能删除分组。`
+              : '分组删除后不可恢复。'}
+          </div>
+        </div>
+        <button
+          className="btn btn-secondary"
+          style={{ flexShrink: 0, color: channelCount ? undefined : 'var(--rust)' }}
+          disabled={Boolean(channelCount) || deleteLoading}
+          onClick={removeGroup}
+        >
+          {deleteLoading ? '删除中...' : '删除'}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 function formatSettingsDate(value) {
   const date = value ? new Date(value) : null;
   if (!date || Number.isNaN(date.getTime())) return '未知';
@@ -798,6 +899,7 @@ function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
 function ChannelInviteModal({ server, channel, onClose }) {
   const [invite, setInvite] = useStateM(null);
   const [friends, setFriends] = useStateM([]);
+  const [memberIds, setMemberIds] = useStateM(null);
   const [query, setQuery] = useStateM('');
   const [sentTo, setSentTo] = useStateM({});
   const [copied, setCopied] = useStateM(false);
@@ -812,13 +914,15 @@ function ChannelInviteModal({ server, channel, onClose }) {
 
     async function loadData() {
       try {
-        const [inviteResult, friendItems] = await Promise.all([
+        const [inviteResult, friendItems, memberItems] = await Promise.all([
           API.post(`/api/servers/${server.id}/invite`, {}),
           API.get('/api/friends'),
+          API.get(`/api/servers/${server.id}/members`).catch(() => null),
         ]);
         if (cancelled) return;
         setInvite(inviteResult);
         setFriends(friendItems);
+        if (memberItems) setMemberIds(new Set(memberItems.map(member => member.user?.id).filter(Boolean)));
       } catch (err) {
         if (!cancelled) setError(err.message || '生成邀请失败');
       }
@@ -901,14 +1005,18 @@ function ChannelInviteModal({ server, channel, onClose }) {
               <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink-0)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{friend.display_name}</div>
               <div style={{ fontSize: 12, color: 'var(--ink-2)' }}>@{friend.username}</div>
             </div>
-            <button
-              className={`btn ${sentTo[friend.id] ? 'btn-secondary' : 'btn-primary'}`}
-              style={{ height: 30, padding: '0 16px', fontSize: 13, flexShrink: 0, minWidth: 58 }}
-              disabled={!link || sentTo[friend.id]}
-              onClick={() => inviteFriend(friend)}
-            >
-              {sentTo[friend.id] ? '已邀请' : '邀请'}
-            </button>
+            {memberIds?.has(friend.id) ? (
+              <span className="invite-row-status">已在服务器</span>
+            ) : (
+              <button
+                className={`btn ${sentTo[friend.id] ? 'btn-secondary' : 'btn-primary'}`}
+                style={{ height: 30, padding: '0 16px', fontSize: 13, flexShrink: 0, minWidth: 58 }}
+                disabled={!link || sentTo[friend.id]}
+                onClick={() => inviteFriend(friend)}
+              >
+                {sentTo[friend.id] ? '已邀请' : '邀请'}
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -2294,6 +2402,7 @@ Object.assign(window, {
   CreateServerModal,
   CreateChannelModal,
   CreateGroupModal,
+  GroupEditModal,
   ServerSettingsModal,
   ChannelInviteModal,
   ChannelEditModal,

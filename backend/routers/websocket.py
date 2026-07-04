@@ -87,6 +87,19 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+async def notify_server_members(db, server_id: int, message: dict) -> None:
+    """向服务器全体成员的用户级连接推送事件（频道/分组结构变更等）。"""
+    member_ids = db.scalars(
+        select(ServerMember.user_id).where(ServerMember.server_id == server_id)
+    ).all()
+    for user_id in member_ids:
+        await manager.send_to_user(user_id, message)
+
+
+async def notify_channels_changed(db, server_id: int) -> None:
+    await notify_server_members(db, server_id, {"type": "server.channels_changed", "data": {"server_id": server_id}})
+
+
 def effective_status(user: User) -> str:
     """按 WebSocket 实时连接计算用户的有效在线状态。
 

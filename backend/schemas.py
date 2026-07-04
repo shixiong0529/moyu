@@ -116,6 +116,28 @@ class ChannelUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=64)
     topic: str | None = Field(default=None, max_length=256)
 
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("名称不能为空白")
+        return value
+
+
+class ChannelGroupUpdateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("名称不能为空白")
+        return value
+
 
 class InviteCreateRequest(BaseModel):
     max_uses: int | None = Field(default=None, ge=1, le=1000)

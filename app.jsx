@@ -202,6 +202,7 @@ function App() {
   const [createOpen, setCreateOpen] = useStateApp(false);
   const [createChannelGroup, setCreateChannelGroup] = useStateApp(null);
   const [createGroupOpen, setCreateGroupOpen] = useStateApp(false);
+  const [editGroupOpen, setEditGroupOpen] = useStateApp(null);
   const [serverSettingsOpen, setServerSettingsOpen] = useStateApp(null);
   const [channelInviteOpen, setChannelInviteOpen] = useStateApp(null);
   const [channelEditOpen, setChannelEditOpen] = useStateApp(null);
@@ -425,12 +426,13 @@ function App() {
       else if (leaveServerOpen) setLeaveServerOpen(null);
       else if (serverSettingsOpen) setServerSettingsOpen(null);
       else if (createGroupOpen) setCreateGroupOpen(false);
+      else if (editGroupOpen) setEditGroupOpen(null);
       else if (createOpen) setCreateOpen(false);
       else if (profileCard) setProfileCard(null);
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [quickSwitchOpen, settingsOpen, channelEditOpen, channelInviteOpen, leaveServerOpen, serverSettingsOpen, createGroupOpen, createOpen, profileCard]);
+  }, [quickSwitchOpen, settingsOpen, channelEditOpen, channelInviteOpen, leaveServerOpen, serverSettingsOpen, createGroupOpen, editGroupOpen, createOpen, profileCard]);
 
   useEffectApp(() => {
     const h = (e) => {
@@ -737,6 +739,9 @@ function App() {
     };
   }, [authStatus, isDM, activeChannel?.id, channelKey, currentUserDisplay.id]);
 
+  const activeServerIdRef = React.useRef(activeServerId);
+  useEffectApp(() => { activeServerIdRef.current = activeServerId; }, [activeServerId]);
+
   useEffectApp(function connectDMSocket() {
     if (authStatus !== 'authenticated' || !currentUserDisplay.id) return;
 
@@ -780,6 +785,12 @@ function App() {
         setApiServers(prev => (prev || []).filter(server => server.id !== data.id));
         // 正停留在被删除的服务器时退回私信视图（函数式更新避免闭包里的旧值）
         setActiveServerId(prev => prev === data.id ? 'dm' : prev);
+      },
+      onServerChannelsChanged: (data) => {
+        // 其他成员增删改了频道/分组：正在浏览该服务器时即时刷新频道列表
+        if (data?.server_id && data.server_id === activeServerIdRef.current) {
+          refreshActiveServerDetail(data.server_id).catch(() => {});
+        }
       },
     });
 
@@ -1183,6 +1194,7 @@ function App() {
               onInvite={() => setInviteServer(activeServer)}
               onReviewRequests={() => setJoinRequestsServer(activeServer)}
               onCreateGroup={() => setCreateGroupOpen(true)}
+              onEditGroup={(group) => setEditGroupOpen(group)}
               onServerSettings={() => setServerSettingsOpen(activeServer)}
               onLeaveServer={() => setLeaveServerOpen(activeServer)}
               onDeleteServer={() => setServerSettingsOpen({ ...activeServer, _dangerOpen: true })}
@@ -1298,6 +1310,15 @@ function App() {
           server={activeServer}
           onClose={() => setCreateGroupOpen(false)}
           onCreated={handleGroupCreated}
+        />
+      )}
+
+      {editGroupOpen && (
+        <GroupEditModal
+          server={activeServer}
+          group={editGroupOpen}
+          onClose={() => setEditGroupOpen(null)}
+          onChanged={() => refreshActiveServerDetail()}
         />
       )}
 
@@ -1582,6 +1603,7 @@ function InlineChannelSidebar({
   onInvite,
   onReviewRequests,
   onCreateGroup,
+  onEditGroup,
   onServerSettings,
   onLeaveServer,
   onDeleteServer,
@@ -1629,7 +1651,12 @@ function InlineChannelSidebar({
             <div className="section-label">
               <span>{g.group}</span>
               {isManager && (
-                <span className="plus" title="创建频道" onClick={(e) => { e.stopPropagation(); onCreateChannel?.(g); }}><Icon name="plus" size={14}/></span>
+                <span className="section-label-actions">
+                  {g.id && (
+                    <span className="plus" title="编辑分组" onClick={(e) => { e.stopPropagation(); onEditGroup?.(g); }}><Icon name="edit" size={12}/></span>
+                  )}
+                  <span className="plus" title="创建频道" onClick={(e) => { e.stopPropagation(); onCreateChannel?.(g); }}><Icon name="plus" size={14}/></span>
+                </span>
               )}
             </div>
             {g.items.map(ch => (
@@ -1639,7 +1666,7 @@ function InlineChannelSidebar({
                 active={activeChannel?.id === ch.id}
                 onClick={() => onSelectChannel(ch)}
                 onInvite={() => onInviteChannel?.(ch)}
-                onEdit={() => onEditChannel?.(ch)}
+                onEdit={isManager ? () => onEditChannel?.(ch) : undefined}
               />
             ))}
           </React.Fragment>
@@ -1661,14 +1688,16 @@ function ChannelActionButtons({ onInvite, onEdit }) {
         <Icon name="users" size={17} stroke={2.2}/>
         <Icon name="plus" size={10} stroke={2.4}/>
       </button>
-      <button
-        type="button"
-        title="编辑频道"
-        aria-label="编辑频道"
-        onClick={(e) => { e.stopPropagation(); onEdit?.(); }}
-      >
-        <Icon name="settings" size={18} stroke={2.1}/>
-      </button>
+      {onEdit && (
+        <button
+          type="button"
+          title="编辑频道"
+          aria-label="编辑频道"
+          onClick={(e) => { e.stopPropagation(); onEdit(); }}
+        >
+          <Icon name="settings" size={18} stroke={2.1}/>
+        </button>
+      )}
     </span>
   );
 }

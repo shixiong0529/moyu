@@ -11,10 +11,11 @@ from sqlalchemy.orm import Session, selectinload
 from auth import get_current_user
 from database import get_db
 from models import Bot, Channel, ChannelGroup, DirectMessage, Friendship, Invite, JoinRequest, Message, PinnedMessage, Reaction, Server, ServerMember, User
-from routers.websocket import effective_status, manager
+from routers.websocket import effective_status, manager, notify_channels_changed
 from schemas import (
     ChannelCreateRequest,
     ChannelGroupCreateRequest,
+    ChannelGroupUpdateRequest,
     InviteCreateRequest,
     JoinRequestCreateRequest,
     ServerFriendInviteRequest,
@@ -672,7 +673,7 @@ def list_members(server_id: int, current_user: User = Depends(get_current_user),
 
 
 @router.post("/{server_id}/channels", status_code=status.HTTP_201_CREATED)
-def create_channel(
+async def create_channel(
     server_id: int,
     payload: ChannelCreateRequest,
     current_user: User = Depends(get_current_user),
@@ -722,11 +723,12 @@ def create_channel(
     db.add(channel)
     db.commit()
     db.refresh(channel)
+    await notify_channels_changed(db, server_id)
     return channel_to_dict(channel)
 
 
 @router.post("/{server_id}/channel-groups", status_code=status.HTTP_201_CREATED)
-def create_channel_group(
+async def create_channel_group(
     server_id: int,
     payload: ChannelGroupCreateRequest,
     current_user: User = Depends(get_current_user),
@@ -750,12 +752,70 @@ def create_channel_group(
     db.add(group)
     db.commit()
     db.refresh(group)
+    await notify_channels_changed(db, server_id)
     return {
         "id": group.id,
         "server_id": group.server_id,
         "name": group.name,
         "position": group.position,
     }
+
+
+@router.patch("/{server_id}/channel-groups/{group_id}")
+async def update_channel_group(
+    server_id: int,
+    group_id: int,
+    payload: ChannelGroupUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_manager(db, server_id, current_user.id)
+    group = db.get(ChannelGroup, group_id)
+    if group is None or group.server_id != server_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="channel group not found")
+
+    duplicate = db.scalar(
+        select(ChannelGroup).where(
+            ChannelGroup.server_id == server_id,
+            ChannelGroup.name == payload.name,
+            ChannelGroup.id != group_id,
+        )
+    )
+    if duplicate is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="同名分组已存在")
+
+    group.name = payload.name
+    db.commit()
+    db.refresh(group)
+    await notify_channels_changed(db, server_id)
+    return {
+        "id": group.id,
+        "server_id": group.server_id,
+        "name": group.name,
+        "position": group.position,
+    }
+
+
+@router.delete("/{server_id}/channel-groups/{group_id}")
+async def delete_channel_group(
+    server_id: int,
+    group_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_manager(db, server_id, current_user.id)
+    group = db.get(ChannelGroup, group_id)
+    if group is None or group.server_id != server_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="channel group not found")
+
+    channel_count = len(group.channels)
+    if channel_count:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="分组内还有频道，请先删除或移走频道")
+
+    db.delete(group)
+    db.commit()
+    await notify_channels_changed(db, server_id)
+    return {"ok": True, "group_id": group_id}
 
 
 @router.post("/{server_id}/invite", status_code=status.HTTP_201_CREATED)

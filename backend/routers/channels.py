@@ -11,7 +11,7 @@ from auth import get_current_user
 from database import get_db
 from models import Channel, ChannelGroup, Message, PinnedMessage, Reaction, ServerMember, User
 from schemas import ChannelUpdateRequest, MessageCreateRequest, MessageUpdateRequest, ReactionRequest
-from routers.websocket import manager
+from routers.websocket import manager, notify_channels_changed
 from telegram_service import notify as tg_notify
 
 router = APIRouter(tags=["channels"])
@@ -212,7 +212,7 @@ def list_messages(
 
 
 @router.patch("/api/channels/{channel_id}")
-def update_channel(
+async def update_channel(
     channel_id: int,
     payload: ChannelUpdateRequest,
     current_user: User = Depends(get_current_user),
@@ -228,11 +228,12 @@ def update_channel(
     db.add(channel)
     db.commit()
     db.refresh(channel)
+    await notify_channels_changed(db, channel.server_id)
     return channel_to_dict(channel)
 
 
 @router.delete("/api/channels/{channel_id}")
-def delete_channel(
+async def delete_channel(
     channel_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -248,6 +249,7 @@ def delete_channel(
     db.execute(delete(PinnedMessage).where(PinnedMessage.channel_id == channel_id))
     db.delete(channel)
     db.commit()
+    await notify_channels_changed(db, server_id)
     return {"ok": True, "server_id": server_id, "channel_id": channel_id}
 
 

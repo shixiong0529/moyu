@@ -454,6 +454,12 @@ body {
   color: var(--ink-2);
 }
 .section-label:hover .plus { opacity: 1; }
+.section-label .plus:hover { color: var(--ink-0); }
+.section-label-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
 
 .channel-item {
   display: flex;

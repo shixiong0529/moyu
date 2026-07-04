@@ -159,6 +159,8 @@ function ServerRail({
       if (!pill) return;
       const targetId = parseInt(pill.dataset.sid);
       if (!targetId || targetId === dragIdRef.current) return;
+      // 管理员服务器固定置顶，不参与重排
+      if (localServersRef.current.find(s => s.id === targetId)?.is_admin_server) return;
       const dragged = dragIdRef.current;
       setLocalServers(prev => {
 const from = prev.findIndex(s => s.id === dragged);
@@ -192,7 +194,7 @@ const from = prev.findIndex(s => s.id === dragged);
       {localServers.map((s, i) => {
         if (s.id === 'divider' || s.id === 'divider2') return <div key={s.id} className="server-divider" />;
         const active = activeServer === s.id;
-        const isDraggable = !s.kind && typeof s.id === 'number';
+        const isDraggable = !s.kind && typeof s.id === 'number' && !s.is_admin_server;
         const isDragging = dragId === s.id;
         return (
           <div key={s.id} className={`server-pill ${active ? 'active' : ''}`}
