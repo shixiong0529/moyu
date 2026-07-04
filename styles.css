@@ -1251,6 +1251,40 @@ body {
   font-family: var(--ff-ui);
 }
 
+/* 成员栏 / @补全弹层的唯一用户名标注（显示名可重复，@用户名唯一） */
+.member-item .name .member-handle {
+  margin-left: 5px;
+  font-family: var(--ff-mono);
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--ink-2);
+  opacity: 0.85;
+}
+.mention-popover .mention-handle {
+  margin-left: auto;
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  padding-left: 10px;
+  flex-shrink: 0;
+}
+
+/* 线索面板里的图片缩略图（面板窄，限制尺寸） */
+.thread-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.thread-images img {
+  max-width: 180px;
+  max-height: 140px;
+  border-radius: 8px;
+  border: 1px solid var(--paper-3);
+  display: block;
+  object-fit: cover;
+}
+
 /* Compact continuation messages (同作者连续消息合并) */
 .msg-group.compact { padding-top: 0; padding-bottom: 1px; }
 .msg-group.compact .msg-avatar.compact-time {

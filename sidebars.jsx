@@ -413,7 +413,10 @@ function MemberSidebar({ members, onOpenMember, onMentionMember }) {
                 <span className={`status-dot ${m.status}`} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div className={`name ${m.role ? 'role-'+m.role : ''}`}>{m.name}</div>
+                <div className={`name ${m.role ? 'role-'+m.role : ''}`}>
+                  {m.name}
+                  {m.username && <span className="member-handle">@{m.username}</span>}
+                </div>
                 {m.activity && (
                   <div className="activity">{m.activity}</div>
                 )}

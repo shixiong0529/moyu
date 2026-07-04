@@ -510,6 +510,7 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
             }}>
               <span className={`avatar ${member.color || 'av-1'}`}/>
               <span>{member.name}</span>
+              {member.username && <span className="mention-handle">@{member.username}</span>}
             </div>
           ))}
         </div>
@@ -625,6 +626,26 @@ function PinsPanel({ pins, onClose, onUnpin }) {
   );
 }
 
+// 线索面板里的消息体：文字去掉图片链接，图片渲染为缩略图（面板窄，控制尺寸）
+function ThreadMessageBody({ content }) {
+  const links = getImageLinks(content);
+  const text = links.length > 0 ? stripImageLinks(content) : content;
+  return (
+    <>
+      {text && <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(text) }} />}
+      {links.length > 0 && (
+        <div className="thread-images">
+          {links.map(link => (
+            <a key={link} href={link} target="_blank" rel="noreferrer">
+              <img src={link} alt="图片" />
+            </a>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 function ThreadPanel({ rootMessage, replies, onClose, onSendReply }) {
   const [value, setValue] = useStateChat('');
   if (!rootMessage) return null;
@@ -648,7 +669,7 @@ function ThreadPanel({ rootMessage, replies, onClose, onSendReply }) {
       </div>
       <div className="thread-root">
         <div className="meta">{rootMessage.name} · {rootMessage.time}</div>
-        <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(rootContent) }} />
+        <ThreadMessageBody content={rootContent} />
       </div>
       <div className="thread-replies">
         {replies.length === 0 ? (
@@ -658,7 +679,7 @@ function ThreadPanel({ rootMessage, replies, onClose, onSendReply }) {
           return (
             <div className="thread-reply" key={reply.id}>
               <div className="meta">{reply.name} · {reply.time}</div>
-              <div dangerouslySetInnerHTML={{ __html: renderMessageHtml(content) }} />
+              <ThreadMessageBody content={content} />
             </div>
           );
         })}
@@ -762,11 +783,19 @@ function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, s
   // 普通回复：hover 工具栏点"回复"后，输入框上方出现"正在回复"条，发送自动带 reply_to_id
   const [replyTarget, setReplyTarget] = useStateChat(null);
   useEffectChat(() => { setReplyTarget(null); }, [channel?.id]);
+
+  // 回复 bot 的消息时自动补 @bot名：bot 只响应提及，不补的话它收不到、不会回
+  const ensureBotMention = (text, target) => {
+    if (!target?.bot || !target?.name) return text;
+    const mention = '@' + target.name;
+    return text.includes(mention) ? text : `${mention} ${text}`;
+  };
+
   const sendWithReply = async (text, options = {}) => {
     const opts = replyTarget && typeof replyTarget.id === 'number'
       ? { reply_to_id: replyTarget.id, ...options }
       : options;
-    await onSend(text, opts);
+    await onSend(ensureBotMention(text, replyTarget), opts);
     setReplyTarget(null);
   };
 
@@ -871,7 +900,7 @@ function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, s
           rootMessage={threadMessage}
           replies={threadReplies}
           onClose={() => setThreadMessage(null)}
-          onSendReply={(text, rootId) => onSend(text, { reply_to_id: rootId })}
+          onSendReply={(text, rootId) => onSend(ensureBotMention(text, threadMessage), { reply_to_id: rootId })}
         />
       )}
       <Composer channelName={channel?.name || ''} onSend={sendWithReply} error={sendError} typingText={typingText} members={members} sendMode={sendMode} pendingMention={pendingMention} replyTarget={replyTarget} onCancelReply={() => setReplyTarget(null)}/>

@@ -58,6 +58,8 @@ function apiMessageToView(message) {
     id: message.id,
     type: 'message',
     name: author.display_name || author.username || 'Unknown',
+    username: author.username,
+    bot: Boolean(author.is_bot),
     color: author.avatar_color || 'av-1',
     avatar_url: author.avatar_url || null,
     authorId: author.id,
@@ -597,7 +599,7 @@ function App() {
     visibleServerMembers
       .flatMap(group => group.items)
       .filter(m => m.userId !== currentUserDisplay.id)
-      .map(m => ({ id: m.id, name: m.name, color: m.color, status: m.status, isBot: m.isBot }))
+      .map(m => ({ id: m.id, name: m.name, username: m.username, color: m.color, status: m.status, isBot: m.isBot }))
   ), [visibleServerMembers, currentUserDisplay.id]);
 
   useEffectApp(function loadChannelMessages() {

@@ -91,6 +91,7 @@ def message_to_dict(message: Message, current_user_id: int) -> dict:
             "avatar_url": message.author.avatar_url,
             "status": message.author.status,
             "bio": message.author.bio,
+            "is_bot": message.author.is_bot,
             "created_at": message.author.created_at,
         },
         "reactions": [
