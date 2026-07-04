@@ -143,7 +143,9 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
       setEditing(false);
       setEditValue(content);
     }
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // 中文等输入法用回车确认候选字时也会触发 keydown('Enter')，
+    // 此时 isComposing 为 true（旧版 Safari 用 keyCode 229 表示），不应当作发送/提交处理
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
       e.preventDefault();
       submitEdit();
     }
@@ -447,6 +449,9 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
       fileRef.current?.click();
       return;
     }
+    // 中文等输入法按回车确认候选字时，浏览器也会派发 keydown('Enter')，
+    // isComposing 为 true（旧版 Safari 用 keyCode 229 表示）；此时应该只把字交给输入框，不能被当成发送/选中操作
+    if (e.key === 'Enter' && (e.nativeEvent.isComposing || e.keyCode === 229)) return;
     const mentionActive = mentionOpen && mentionOptions.length > 0;
     if (mentionActive && e.key === 'ArrowDown') {
       e.preventDefault();
@@ -721,7 +726,7 @@ function ThreadPanel({ rootMessage, replies, onClose, onSendReply }) {
       </div>
       <div className="thread-compose">
         <textarea autoFocus value={value} onChange={e => setValue(e.target.value)} onKeyDown={e => {
-          if (e.key === 'Enter' && !e.shiftKey) {
+          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
             e.preventDefault();
             submit();
           }
