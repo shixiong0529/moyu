@@ -64,6 +64,8 @@ function apiMessageToView(message) {
     color: author.avatar_color || 'av-1',
     avatar_url: author.avatar_url || null,
     authorId: author.id,
+    isAnonymous: Boolean(message.is_anonymous),
+    embed: message.embed || null,
     channelId: message.channel_id,
     replyToId: message.reply_to_id,
     content: message.content || '',
@@ -894,6 +896,7 @@ function App() {
         const saved = await API.post(`/api/channels/${activeChannel.id}/messages`, {
           content: text,
           reply_to_id: options.reply_to_id || null,
+          is_anonymous: Boolean(options.is_anonymous),
         });
         const view = apiMessageToView(saved);
         setMessagesByChannel(prev => ({

@@ -141,11 +141,13 @@ class Channel(Base):
     kind: Mapped[str] = mapped_column(String(16), nullable=False, default="text", server_default="text")
     topic: Mapped[str | None] = mapped_column(String(256), nullable=True)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    allow_anonymous: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
 
     server: Mapped["Server"] = relationship(back_populates="channels")
     group: Mapped["ChannelGroup | None"] = relationship(back_populates="channels")
     messages: Mapped[list["Message"]] = relationship(back_populates="channel", cascade="all, delete-orphan")
     pins: Mapped[list["PinnedMessage"]] = relationship(back_populates="channel", cascade="all, delete-orphan")
+    anon_identities: Mapped[list["ChannelAnonIdentity"]] = relationship(back_populates="channel", cascade="all, delete-orphan")
 
 
 class Message(Base):
@@ -160,12 +162,30 @@ class Message(Base):
     edited_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    is_anonymous: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    embed_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     channel: Mapped["Channel"] = relationship(back_populates="messages")
     author: Mapped["User"] = relationship(back_populates="messages")
     reply_to: Mapped["Message | None"] = relationship(remote_side=[id])
     reactions: Mapped[list["Reaction"]] = relationship(back_populates="message", cascade="all, delete-orphan")
     pins: Mapped[list["PinnedMessage"]] = relationship(back_populates="message", cascade="all, delete-orphan")
+
+
+class ChannelAnonIdentity(Base):
+    """频道内匿名身份分配：同一用户在同一频道匿名发言时保持同一个编号，
+    但编号不跨频道复用，避免不同频道之间的匿名身份被相互关联。"""
+    __tablename__ = "channel_anon_identities"
+    __table_args__ = (UniqueConstraint("channel_id", "user_id", name="uq_channel_anon_identity"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    channel_id: Mapped[int] = mapped_column(ForeignKey("channels.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    anon_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+
+    channel: Mapped["Channel"] = relationship(back_populates="anon_identities")
+    user: Mapped["User"] = relationship()
 
 
 class Reaction(Base):

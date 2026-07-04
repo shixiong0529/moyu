@@ -57,6 +57,26 @@ class ConnectionManager:
         for websocket in dead:
             await self.disconnect_channel(channel_id, websocket)
 
+    async def broadcast_to_channel_masked(
+        self,
+        channel_id: int,
+        full_message: dict,
+        masked_message: dict,
+        unmask_user_ids: set[int],
+    ) -> None:
+        """匿名消息广播：unmask_user_ids（该服务器的 founder/mod）收到真实作者信息，
+        其他人收到脱敏后的版本。同一事件按接收者身份分别下发，不能只发一份。"""
+        dead: list[WebSocket] = []
+        for websocket in list(self.channel_connections.get(channel_id, set())):
+            user = self.channel_users.get(websocket)
+            payload = full_message if (user and user.id in unmask_user_ids) else masked_message
+            try:
+                await websocket.send_json(payload)
+            except Exception:
+                dead.append(websocket)
+        for websocket in dead:
+            await self.disconnect_channel(channel_id, websocket)
+
     async def disconnect_user_channels(self, user_id: int, channel_ids: list[int]) -> None:
         """关闭某用户在指定频道上的所有 WS 连接（用于踢人/退群后即时断开）。"""
         targets: list[tuple[int, WebSocket]] = []

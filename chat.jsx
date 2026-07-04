@@ -109,6 +109,20 @@ function ReactionPicker({ onPick, onClose }) {
   );
 }
 
+function LinkPreviewCard({ embed }) {
+  if (!embed?.title) return null;
+  return (
+    <a className="link-preview-card" href={embed.url} target="_blank" rel="noreferrer">
+      {embed.image && <div className="link-preview-image"><img src={embed.image} alt="" onError={e => { e.currentTarget.closest('.link-preview-card')?.classList.add('no-image'); }}/></div>}
+      <div className="link-preview-body">
+        {embed.siteName && <div className="link-preview-site">{embed.siteName}</div>}
+        <div className="link-preview-title">{embed.title}</div>
+        {embed.description && <div className="link-preview-desc">{embed.description}</div>}
+      </div>
+    </a>
+  );
+}
+
 function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, onOpenThread, onReply, compact, pinned, currentUser, currentRole, inviteDecision, onAcceptInvite, onRejectInvite }) {
   const [editing, setEditing] = useStateChat(false);
   const [editValue, setEditValue] = useStateChat(msg.content || msg.lines?.join('\n') || '');
@@ -121,6 +135,8 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
     ['founder', 'mod'].includes(currentRole)
   );
   const canPin = !msg.isDeleted && ['founder', 'mod'].includes(currentRole);
+  // 匿名消息对普通成员脱敏后 authorId 是 null，没有真实身份可查看
+  const canOpenProfile = msg.authorId != null;
   const content = msg.content || msg.lines?.join('\n') || '';
   const imageLinks = useMemoChat(() => getImageLinks(content), [content]);
   const displayText = useMemoChat(() => (imageLinks.length > 0 ? stripImageLinks(content) : content), [content, imageLinks]);
@@ -178,13 +194,17 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
         </div>
       ) : (
         <div className="msg-avatar" style={{ marginTop: msg.replyTo ? 18 : 0 }}>
-          <Avatar color={msg.color} url={msg.avatar_url} label={msg.name?.[0] || '?'} size={36} onClick={e => onOpenProfile(msg, e)} kind={msg.bot ? 'bot' : undefined}/>
+          <Avatar color={msg.color} url={msg.avatar_url} label={msg.name?.[0] || '?'} size={36} onClick={canOpenProfile ? (e => onOpenProfile(msg, e)) : undefined} kind={msg.bot ? 'bot' : undefined}/>
         </div>
       )}
       <div className="msg-body" style={{ marginTop: msg.replyTo ? 18 : 0 }}>
         {!isCompact && (
           <div className="msg-head">
-            <span className={`author ${msg.role ? 'role-'+msg.role : ''}`} onClick={e => onOpenProfile(msg, e)}>
+            <span
+              className={`author ${msg.role ? 'role-'+msg.role : ''}`}
+              style={canOpenProfile ? undefined : { cursor: 'default' }}
+              onClick={canOpenProfile ? (e => onOpenProfile(msg, e)) : undefined}
+            >
               {msg.name}
             </span>
             {msg.bot && <span className="badge-bot">BOT</span>}
@@ -216,6 +236,7 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
                 ))}
               </div>
             )}
+            {msg.embed?.kind === 'link' && <LinkPreviewCard embed={msg.embed}/>}
             {inviteLink && (onAcceptInvite || onRejectInvite) && (
               <div className="dm-invite-card">
                 <div>
@@ -304,7 +325,7 @@ const EMOJI_CATEGORIES = [
   { label: '符号', icon: '🕯', emojis: ['🕯','💭','👀','🎉','🔴','🟠','🟡','🟢','🔵','🟣','⚫','⚪','🟤','💯','❗','❓','💬','🗨️','💤','♻️'] },
 ];
 
-function Composer({ channelName, onSend, error, typingText, members = [], sendMode = 'enter', pendingMention, replyTarget, onCancelReply }) {
+function Composer({ channelName, allowAnonymous = false, onSend, error, typingText, members = [], sendMode = 'enter', pendingMention, replyTarget, onCancelReply }) {
   const [val, setVal] = useStateChat('');
   const [uploading, setUploading] = useStateChat(false);
   const [uploadError, setUploadError] = useStateChat('');
@@ -312,6 +333,12 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
   const [mentionIndex, setMentionIndex] = useStateChat(0);
   const [emojiOpen, setEmojiOpen] = useStateChat(false);
   const [emojiCategory, setEmojiCategory] = useStateChat(0);
+  const [anonOn, setAnonOn] = useStateChat(false);
+
+  // 频道关掉匿名开关后，composer 里残留的匿名状态也要跟着清掉
+  useEffectChat(function resetAnonOnDisallow() {
+    if (!allowAnonymous) setAnonOn(false);
+  }, [allowAnonymous]);
   const ref = useRefChat(null);
   const fileRef = useRefChat(null);
   const stopTypingRef = useRefChat(null);
@@ -354,7 +381,7 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
   const submit = async () => {
     const v = val.trim();
     if (!v) return;
-    await onSend(v);
+    await onSend(v, anonOn ? { is_anonymous: true } : {});
     API.sendTyping(false);
     setVal('');
     setMentionOpen(false);
@@ -536,11 +563,21 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
           ))}
         </div>
       )}
-      <div className="composer">
+      <div className={`composer ${anonOn ? 'composer-anon' : ''}`}>
         <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={uploadImage}/>
         <button className="plus" title="上传图片" onClick={() => fileRef.current?.click()} disabled={uploading}><Icon name="plus-circle" size={20} /></button>
-        <textarea ref={ref} rows={1} placeholder={`发送到 #${channelName}`} value={val} onChange={onChange} onKeyDown={onKey}/>
+        <textarea ref={ref} rows={1} placeholder={anonOn ? '以匿名身份发送到 #' + channelName : `发送到 #${channelName}`} value={val} onChange={onChange} onKeyDown={onKey}/>
         <div className="right-tools" style={{ position: 'relative' }}>
+          {allowAnonymous && (
+            <button
+              type="button"
+              className={`icon-btn ${anonOn ? 'active' : ''}`}
+              title={anonOn ? '取消匿名，将以真实身份发送' : '匿名发送（对方只会看到"树洞居民 #N"）'}
+              onClick={() => setAnonOn(v => !v)}
+            >
+              🎭
+            </button>
+          )}
           {emojiOpen && (
             <div className="emoji-popover" style={{
               position: 'absolute',
@@ -966,7 +1003,7 @@ function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, s
           onSendReply={(text, rootId) => onSend(ensureBotMention(text, threadMessage), { reply_to_id: rootId })}
         />
       )}
-      <Composer channelName={channel?.name || ''} onSend={sendWithReply} error={sendError} typingText={typingText} members={members} sendMode={sendMode} pendingMention={pendingMention} replyTarget={replyTarget} onCancelReply={() => setReplyTarget(null)}/>
+      <Composer channelName={channel?.name || ''} allowAnonymous={Boolean(channel?.allow_anonymous)} onSend={sendWithReply} error={sendError} typingText={typingText} members={members} sendMode={sendMode} pendingMention={pendingMention} replyTarget={replyTarget} onCancelReply={() => setReplyTarget(null)}/>
     </div>
   );
 }

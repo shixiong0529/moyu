@@ -73,15 +73,7 @@ def server_to_dict(
                 "id": group.id,
                 "group": group.name,
                 "items": [
-                    {
-                        "id": channel.id,
-                        "server_id": channel.server_id,
-                        "group_id": channel.group_id,
-                        "name": channel.name,
-                        "kind": channel.kind,
-                        "topic": channel.topic,
-                        "position": channel.position,
-                    }
+                    channel_to_dict(channel)
                     for channel in sorted(group.channels, key=lambda item: item.position)
                 ],
             }
@@ -125,6 +117,7 @@ def channel_to_dict(channel: Channel) -> dict:
         "kind": channel.kind,
         "topic": channel.topic,
         "position": channel.position,
+        "allow_anonymous": channel.allow_anonymous,
     }
 
 

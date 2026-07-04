@@ -1,20 +1,57 @@
 from collections import Counter
 from datetime import datetime
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from auth import get_current_user
 from database import get_db
-from models import Channel, ChannelGroup, Message, PinnedMessage, Reaction, ServerMember, User
+from link_preview import fetch_link_preview, find_first_url
+from models import Channel, ChannelAnonIdentity, ChannelGroup, Message, PinnedMessage, Reaction, ServerMember, User
 from schemas import ChannelUpdateRequest, MessageCreateRequest, MessageUpdateRequest, ReactionRequest
 from routers.websocket import manager, notify_channels_changed
 from telegram_service import notify as tg_notify
 
 router = APIRouter(tags=["channels"])
+
+
+def get_or_assign_anon_number(db: Session, channel_id: int, user_id: int) -> int:
+    """同一用户在同一频道匿名发言时保持同一个编号；不同频道之间不复用，避免互相关联。"""
+    identity = db.scalar(
+        select(ChannelAnonIdentity).where(
+            ChannelAnonIdentity.channel_id == channel_id,
+            ChannelAnonIdentity.user_id == user_id,
+        )
+    )
+    if identity is not None:
+        return identity.anon_number
+
+    next_number = (
+        db.scalar(
+            select(func.coalesce(func.max(ChannelAnonIdentity.anon_number), 0)).where(
+                ChannelAnonIdentity.channel_id == channel_id
+            )
+        )
+        or 0
+    ) + 1
+    identity = ChannelAnonIdentity(channel_id=channel_id, user_id=user_id, anon_number=next_number)
+    db.add(identity)
+    try:
+        db.flush()
+    except IntegrityError:
+        # 并发下两个请求同时给同一用户分配编号，撞了唯一约束：直接查回已经存在的那条
+        db.rollback()
+        identity = db.scalar(
+            select(ChannelAnonIdentity).where(
+                ChannelAnonIdentity.channel_id == channel_id,
+                ChannelAnonIdentity.user_id == user_id,
+            )
+        )
+    return identity.anon_number
 
 
 def require_channel_member(db: Session, channel_id: int, user_id: int) -> Channel:
@@ -68,22 +105,37 @@ def channel_to_dict(channel: Channel) -> dict:
         "kind": channel.kind,
         "topic": channel.topic,
         "position": channel.position,
+        "allow_anonymous": channel.allow_anonymous,
     }
 
 
-def message_to_dict(message: Message, current_user_id: int) -> dict:
+def anon_author_dict(anon_number: int) -> dict:
+    """匿名身份的假 author：编号决定头像色，保证同一身份视觉上始终一致。"""
+    return {
+        "id": None,
+        "username": None,
+        "display_name": f"🎭 树洞居民 #{anon_number}",
+        "avatar_color": f"av-{(anon_number - 1) % 8 + 1}",
+        "avatar_url": None,
+        "status": "offline",
+        "bio": None,
+        "is_bot": False,
+        "created_at": None,
+    }
+
+
+def message_to_dict(
+    message: Message,
+    current_user_id: int,
+    privileged: bool = False,
+    anon_number: int | None = None,
+) -> dict:
     counts = Counter(reaction.emoji for reaction in message.reactions)
     mine = {(reaction.emoji, reaction.user_id) for reaction in message.reactions}
-    return {
-        "id": message.id,
-        "channel_id": message.channel_id,
-        "content": "此消息已被删除" if message.is_deleted else message.content,
-        "reply_to_id": message.reply_to_id,
-        "is_edited": message.is_edited,
-        "edited_at": message.edited_at,
-        "created_at": message.created_at,
-        "is_deleted": message.is_deleted,
-        "author": {
+    if message.is_anonymous and not privileged:
+        author = anon_author_dict(anon_number or 0)
+    else:
+        author = {
             "id": message.author.id,
             "username": message.author.username,
             "display_name": message.author.display_name,
@@ -93,7 +145,19 @@ def message_to_dict(message: Message, current_user_id: int) -> dict:
             "bio": message.author.bio,
             "is_bot": message.author.is_bot,
             "created_at": message.author.created_at,
-        },
+        }
+    return {
+        "id": message.id,
+        "channel_id": message.channel_id,
+        "content": "此消息已被删除" if message.is_deleted else message.content,
+        "reply_to_id": message.reply_to_id,
+        "is_edited": message.is_edited,
+        "edited_at": message.edited_at,
+        "created_at": message.created_at,
+        "is_deleted": message.is_deleted,
+        "is_anonymous": message.is_anonymous,
+        "embed": json.loads(message.embed_json) if message.embed_json else None,
+        "author": author,
         "reactions": [
             {"emoji": emoji, "count": count, "mine": (emoji, current_user_id) in mine}
             for emoji, count in counts.items()
@@ -170,15 +234,7 @@ def list_channels(server_id: int, current_user: User = Depends(get_current_user)
             "id": group.id,
             "group": group.name,
             "items": [
-                {
-                    "id": channel.id,
-                    "server_id": channel.server_id,
-                    "group_id": channel.group_id,
-                    "name": channel.name,
-                    "kind": channel.kind,
-                    "topic": channel.topic,
-                    "position": channel.position,
-                }
+                channel_to_dict(channel)
                 for channel in sorted(group.channels, key=lambda item: item.position)
             ],
         }
@@ -194,7 +250,7 @@ def list_messages(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    require_channel_member(db, channel_id, current_user.id)
+    channel = require_channel_member(db, channel_id, current_user.id)
     limit = max(1, min(limit, 100))
     query = (
         select(Message)
@@ -208,7 +264,27 @@ def list_messages(
     rows = db.scalars(query).all()
     has_more = len(rows) > limit
     messages = list(reversed(rows[:limit]))
-    return {"messages": [message_to_dict(message, current_user.id) for message in messages], "has_more": has_more}
+
+    member = get_server_member(db, channel.server_id, current_user.id)
+    privileged = bool(member and member.role in {"founder", "mod"})
+    anon_author_ids = {message.author_id for message in messages if message.is_anonymous}
+    anon_numbers: dict[int, int] = {}
+    if anon_author_ids and not privileged:
+        identities = db.scalars(
+            select(ChannelAnonIdentity).where(
+                ChannelAnonIdentity.channel_id == channel_id,
+                ChannelAnonIdentity.user_id.in_(anon_author_ids),
+            )
+        ).all()
+        anon_numbers = {identity.user_id: identity.anon_number for identity in identities}
+
+    return {
+        "messages": [
+            message_to_dict(message, current_user.id, privileged, anon_numbers.get(message.author_id))
+            for message in messages
+        ],
+        "has_more": has_more,
+    }
 
 
 @router.patch("/api/channels/{channel_id}")
@@ -261,19 +337,38 @@ async def create_message(
     db: Session = Depends(get_db),
 ):
     channel = require_channel_member(db, channel_id, current_user.id)
+    actor_member = get_server_member(db, channel.server_id, current_user.id)
     if channel.kind == "announce":
-        member = get_server_member(db, channel.server_id, current_user.id)
-        if member is None or member.role not in {"founder", "mod"}:
+        if actor_member is None or actor_member.role not in {"founder", "mod"}:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有管理员可以在公告频道发布消息")
     if payload.reply_to_id is not None:
         parent = db.get(Message, payload.reply_to_id)
         if parent is None or parent.channel_id != channel_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid reply target")
+    if payload.is_anonymous and not channel.allow_anonymous:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该频道未开启匿名发言")
+
+    embed_json = None
+    url = find_first_url(payload.content)
+    if url:
+        try:
+            preview = await fetch_link_preview(url)
+        except Exception:
+            preview = None
+        if preview:
+            embed_json = json.dumps(preview, ensure_ascii=False)
+
+    anon_number = None
+    if payload.is_anonymous:
+        anon_number = get_or_assign_anon_number(db, channel_id, current_user.id)
+
     message = Message(
         channel_id=channel_id,
         author_id=current_user.id,
         content=payload.content,
         reply_to_id=payload.reply_to_id,
+        is_anonymous=payload.is_anonymous,
+        embed_json=embed_json,
     )
     db.add(message)
     db.commit()
@@ -282,9 +377,32 @@ async def create_message(
         .where(Message.id == message.id)
         .options(selectinload(Message.author), selectinload(Message.reactions))
     )
-    data = message_to_dict(message, current_user.id)
-    await manager.broadcast_to_channel(channel_id, {"type": "message.new", "data": jsonable_encoder(data)})
-    await notify_mentions(payload.content, channel, current_user, db)
+
+    actor_privileged = bool(actor_member and actor_member.role in {"founder", "mod"})
+    data = message_to_dict(message, current_user.id, actor_privileged, anon_number)
+
+    if payload.is_anonymous:
+        privileged_ids = set(
+            db.scalars(
+                select(ServerMember.user_id).where(
+                    ServerMember.server_id == channel.server_id,
+                    ServerMember.role.in_(["founder", "mod"]),
+                )
+            ).all()
+        )
+        full_data = message_to_dict(message, current_user.id, True, anon_number)
+        masked_data = message_to_dict(message, current_user.id, False, anon_number)
+        await manager.broadcast_to_channel_masked(
+            channel_id,
+            {"type": "message.new", "data": jsonable_encoder(full_data)},
+            {"type": "message.new", "data": jsonable_encoder(masked_data)},
+            privileged_ids,
+        )
+    else:
+        await manager.broadcast_to_channel(channel_id, {"type": "message.new", "data": jsonable_encoder(data)})
+    if not payload.is_anonymous:
+        # 匿名消息不做 @提及 通知：Telegram 推送文案会带上发送者身份，等于变相解除匿名
+        await notify_mentions(payload.content, channel, current_user, db)
     return data
 
 

@@ -1056,6 +1056,7 @@ function ChannelInviteModal({ server, channel, onClose }) {
 function ChannelEditModal({ server, channel, onClose, onUpdated, onDeleted }) {
   const [name, setName] = useStateM(channel?.name || '');
   const [topic, setTopic] = useStateM(channel?.topic || '');
+  const [allowAnonymous, setAllowAnonymous] = useStateM(Boolean(channel?.allow_anonymous));
   const [deleteOpen, setDeleteOpen] = useStateM(false);
   const [error, setError] = useStateM('');
   const [loading, setLoading] = useStateM(false);
@@ -1066,6 +1067,7 @@ function ChannelEditModal({ server, channel, onClose, onUpdated, onDeleted }) {
   useEffectM(function syncChannelEditState() {
     setName(channel?.name || '');
     setTopic(channel?.topic || '');
+    setAllowAnonymous(Boolean(channel?.allow_anonymous));
     setDeleteOpen(false);
     setError('');
   }, [channel?.id]);
@@ -1079,6 +1081,7 @@ function ChannelEditModal({ server, channel, onClose, onUpdated, onDeleted }) {
       const updated = await API.patch(`/api/channels/${channel.id}`, {
         name: cleanName,
         topic: topic.trim() || null,
+        allow_anonymous: allowAnonymous,
       });
       await onUpdated?.(updated);
     } catch (err) {
@@ -1153,6 +1156,22 @@ function ChannelEditModal({ server, channel, onClose, onUpdated, onDeleted }) {
           <div style={{ display: 'flex', justifyContent: 'flex-end', color: remaining < 30 ? 'var(--rust)' : 'var(--ink-2)', fontSize: 11, marginTop: 4 }}>
             {remaining} / 256
           </div>
+
+          {channel?.kind !== 'voice' && (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              gap: 12, marginTop: 20, padding: '12px 14px',
+              border: '1px solid var(--paper-3)', borderRadius: 8, background: 'var(--paper-1)',
+            }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--ink-0)' }}>允许匿名发言</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 2 }}>
+                  开启后，成员发消息时可选择以"树洞居民 #N"的身份匿名发布。管理员始终能看到真实身份。
+                </div>
+              </div>
+              <ToggleSwitch on={allowAnonymous} onChange={setAllowAnonymous}/>
+            </div>
+          )}
 
           {error && <div style={{ color: 'var(--rust)', fontSize: 13, marginTop: 10 }}>{error}</div>}
 

@@ -115,6 +115,7 @@ class ChannelCreateRequest(BaseModel):
 class ChannelUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=64)
     topic: str | None = Field(default=None, max_length=256)
+    allow_anonymous: bool | None = None
 
     @field_validator("name")
     @classmethod
@@ -153,6 +154,7 @@ class ServerFriendInviteRequest(BaseModel):
 class MessageCreateRequest(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
     reply_to_id: int | None = None
+    is_anonymous: bool = False
 
 
 class MessageUpdateRequest(BaseModel):
