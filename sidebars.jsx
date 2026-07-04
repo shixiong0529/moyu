@@ -29,6 +29,89 @@ function Avatar({ color, label, size = 36, kind, status, onClick, url }) {
   );
 }
 
+// 服务器管理菜单：服务器栏右键与频道侧栏标题下拉共用同一实现
+function ServerMenu({
+  server,
+  style,
+  onClose,
+  onInvite,
+  onReviewRequests,
+  onCreateChannel,
+  onCreateGroup,
+  onServerSettings,
+  onLeaveServer,
+  onDeleteServer,
+}) {
+  const menuRef = React.useRef(null);
+  const role = server?.role;
+  const isFounder = role === 'founder';
+  const isManager = isFounder || role === 'mod';
+  const pending = server?.pending_join_requests || 0;
+
+  React.useEffect(() => {
+    menuRef.current?.focus();
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [onClose]);
+
+  const moveFocus = (delta) => {
+    const items = Array.from(menuRef.current?.querySelectorAll('button') || []);
+    if (!items.length) return;
+    const index = items.indexOf(document.activeElement);
+    items[(index + delta + items.length) % items.length]?.focus();
+  };
+
+  const run = (action) => {
+    onClose?.();
+    action?.();
+  };
+
+  const item = (icon, label, action, { kind, badge } = {}) => (
+    <button className={`server-menu-item${kind ? ` ${kind}` : ''}`} onClick={() => run(action)}>
+      <Icon name={icon} size={15}/>
+      <span>{label}</span>
+      {badge > 0 && <em className="server-menu-badge">{badge > 99 ? '99+' : badge}</em>}
+    </button>
+  );
+
+  return (
+    <div
+      ref={menuRef}
+      tabIndex={-1}
+      className="server-context-menu"
+      style={style}
+      onClick={e => e.stopPropagation()}
+      onContextMenu={e => e.preventDefault()}
+      onKeyDown={e => {
+        if (e.key === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
+        if (e.key === 'ArrowUp') { e.preventDefault(); moveFocus(-1); }
+      }}
+    >
+      {item('users', '邀请成员', onInvite, { kind: 'accent' })}
+      {isFounder && item('inbox', '审核申请', onReviewRequests, { badge: pending })}
+      {isManager && (
+        <>
+          <div className="server-menu-divider"/>
+          {item('hash', '创建频道', onCreateChannel)}
+          {item('plus', '创建分组', onCreateGroup)}
+          <div className="server-menu-divider"/>
+          {item('settings', '服务器设置', onServerSettings)}
+        </>
+      )}
+      <div className="server-menu-divider"/>
+      {isFounder
+        ? item('trash', '删除服务器', onDeleteServer, { kind: 'danger' })
+        : item('log-out', '退出服务器', onLeaveServer, { kind: 'danger' })}
+    </div>
+  );
+}
+
 function ServerRail({
   activeServer,
   onSelect,
@@ -36,6 +119,7 @@ function ServerRail({
   onInvite,
   onReviewRequests,
   onCreateChannel,
+  onCreateGroup,
   onServerSettings,
   onDeleteServer,
   onLeave,
@@ -167,25 +251,21 @@ const from = prev.findIndex(s => s.id === dragged);
       {menu && (
         <>
           <div className="server-menu-backdrop" onClick={() => setMenu(null)}/>
-          <div className="server-context-menu" style={{ left: menu.x, top: menu.y }}>
-            <button onClick={() => { onInvite?.(menu.server); setMenu(null); }}>邀请成员</button>
-            {menu.server.role === 'founder' && (
-              <>
-                <button onClick={() => { onReviewRequests?.(menu.server); setMenu(null); }}>
-                  审核申请{menu.server.pending_join_requests ? `（${menu.server.pending_join_requests}）` : ''}
-                </button>
-                <div style={{ height: 1, background: 'var(--paper-3)', margin: '4px 0' }}/>
-                <button onClick={() => { onCreateChannel?.(menu.server); setMenu(null); }}>创建频道</button>
-                <button onClick={() => { onServerSettings?.(menu.server); setMenu(null); }}>服务器设置</button>
-              </>
-            )}
-            <div style={{ height: 1, background: 'var(--paper-3)', margin: '4px 0' }}/>
-            {menu.server.role === 'founder' ? (
-              <button className="danger" onClick={() => { onDeleteServer?.(menu.server); setMenu(null); }}>删除服务器</button>
-            ) : (
-              <button className="danger" onClick={() => { onLeave?.(menu.server); setMenu(null); }}>退出服务器</button>
-            )}
-          </div>
+          <ServerMenu
+            server={menu.server}
+            style={{
+              left: Math.min(menu.x, window.innerWidth - 200),
+              top: Math.min(menu.y, window.innerHeight - 300),
+            }}
+            onClose={() => setMenu(null)}
+            onInvite={() => onInvite?.(menu.server)}
+            onReviewRequests={() => onReviewRequests?.(menu.server)}
+            onCreateChannel={() => onCreateChannel?.(menu.server)}
+            onCreateGroup={() => onCreateGroup?.(menu.server)}
+            onServerSettings={() => onServerSettings?.(menu.server)}
+            onLeaveServer={() => onLeave?.(menu.server)}
+            onDeleteServer={() => onDeleteServer?.(menu.server)}
+          />
         </>
       )}
       </div>
@@ -435,4 +515,4 @@ function MemberSidebar({ members, onOpenMember, onMentionMember, onClose }) {
   );
 }
 
-Object.assign(window, { ServerRail, ChannelSidebar, DMSidebar, UserCard, MemberSidebar, Avatar, ChannelGlyph });
+Object.assign(window, { ServerRail, ServerMenu, ChannelSidebar, DMSidebar, UserCard, MemberSidebar, Avatar, ChannelGlyph });

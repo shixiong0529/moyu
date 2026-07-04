@@ -320,26 +320,75 @@ body {
 .server-context-menu {
   position: fixed;
   z-index: 260;
-  min-width: 148px;
-  padding: 5px;
+  min-width: 176px;
+  padding: 6px;
   border: 1px solid var(--paper-3);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--paper-0);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md), 0 12px 32px rgba(0, 0, 0, 0.12);
+  outline: none;
+  animation: server-menu-in 0.14s ease-out;
+  transform-origin: top center;
 }
-.server-context-menu button {
+@keyframes server-menu-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.server-menu-item {
   width: 100%;
-  height: 30px;
+  height: 34px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--ink-1);
   text-align: left;
   padding: 0 10px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13.5px;
+  font-family: var(--ff-ui);
+  transition: background 0.1s ease, color 0.1s ease;
 }
-.server-context-menu button:hover { background: var(--paper-2); color: var(--ink-0); }
-.server-context-menu button.danger { color: var(--rust); }
+.server-menu-item svg { color: var(--ink-2); flex-shrink: 0; transition: color 0.1s ease; }
+.server-menu-item span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.server-menu-item:hover,
+.server-menu-item:focus-visible { background: var(--paper-2); color: var(--ink-0); outline: none; }
+.server-menu-item:hover svg,
+.server-menu-item:focus-visible svg { color: var(--accent); }
+.server-menu-item.accent { color: var(--accent); }
+.server-menu-item.accent svg { color: var(--accent); }
+.server-menu-item.accent:hover,
+.server-menu-item.accent:focus-visible { background: var(--paper-2); color: var(--accent); }
+.server-menu-item.danger { color: var(--rust); }
+.server-menu-item.danger svg { color: var(--rust); }
+.server-menu-item.danger:hover,
+.server-menu-item.danger:focus-visible { background: rgba(181, 88, 58, 0.12); color: var(--rust); }
+.server-menu-item.danger:hover svg,
+.server-menu-item.danger:focus-visible svg { color: var(--rust); }
+.server-menu-divider {
+  height: 1px;
+  background: var(--paper-3);
+  margin: 5px 8px;
+}
+.server-menu-badge {
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--rust);
+  color: #fff;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  font-family: var(--ff-mono);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  flex-shrink: 0;
+}
+.sidebar-header.menu-open { background: var(--paper-2); }
 
 /* ==============================
    Channel sidebar

@@ -34,6 +34,9 @@ const Icon = ({ name, size = 16, stroke = 1.5 }) => {
     case 'inbox': return (
       <svg {...common}><path d="M4 14V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v7M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4M4 14h4l1 2h6l1-2h4"/></svg>
     );
+    case 'log-out': return (
+      <svg {...common}><path d="M14 4H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7M10 12h10M17 9l3 3-3 3"/></svg>
+    );
     case 'help': return (
       <svg {...common}><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 3.5M12 17v.01"/></svg>
     );

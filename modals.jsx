@@ -335,6 +335,14 @@ function CreateChannelModal({ server, groups = [], initialGroup, onClose, onCrea
   const [error, setError] = useStateM('');
   const [loading, setLoading] = useStateM(false);
 
+  // 分组列表异步刷新（如从服务器栏右键切换服务器）后，丢弃不属于当前列表的旧分组选择
+  useEffectM(function syncGroupSelection() {
+    if (groupId === 'new') return;
+    if (!groups.some(group => String(group.id) === String(groupId))) {
+      setGroupId(groups[0]?.id || '');
+    }
+  }, [groups]);
+
   const createChannel = async () => {
     const cleanName = name.trim().replace(/^#/, '');
     if (!cleanName || loading || !server?.id) return;
@@ -344,7 +352,8 @@ function CreateChannelModal({ server, groups = [], initialGroup, onClose, onCrea
       const payload = {
         name: cleanName,
         kind,
-        group_id: groupId === 'new' ? null : Number(groupId),
+        // 未选中有效分组时交给后端落到默认分组，避免提交 group_id: 0
+        group_id: groupId && groupId !== 'new' ? Number(groupId) : null,
         group_name: groupId === 'new' ? (groupName.trim() || '新分组') : null,
       };
       const channel = await API.post(`/api/servers/${server.id}/channels`, payload);
@@ -372,7 +381,19 @@ function CreateChannelModal({ server, groups = [], initialGroup, onClose, onCrea
       }
     >
       <label className="form-label">频道名称</label>
-      <input className="form-input" placeholder="例如：读书讨论" value={name} onChange={e => setName(e.target.value)} autoFocus/>
+      <input
+        className="form-input"
+        placeholder="例如：读书讨论"
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            createChannel();
+          }
+        }}
+        autoFocus
+      />
 
       <label className="form-label" style={{ marginTop: 16 }}>频道类型</label>
       <select className="form-input" value={kind} onChange={e => setKind(e.target.value)}>
@@ -437,7 +458,7 @@ function CreateGroupModal({ server, onClose, onCreated }) {
         maxLength={64}
         onChange={e => setName(e.target.value)}
         onKeyDown={e => {
-          if (e.key === 'Enter') {
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
             e.preventDefault();
             createGroup();
           }
@@ -458,6 +479,7 @@ function formatSettingsDate(value) {
 function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
   const [section, setSection] = useStateM(server?._dangerOpen ? 'danger' : 'overview');
   const [name, setName] = useStateM(server?.name || '');
+  const [savedName, setSavedName] = useStateM(server?.name || '');
   const [shortName, setShortName] = useStateM(server?.short_name || server?.short || '');
   const [color, setColor] = useStateM(server?.color || 'av-1');
   const [iconUrl, setIconUrl] = useStateM(server?.icon_url || '');
@@ -481,6 +503,7 @@ function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
       .then(detail => {
         if (cancelled) return;
         setName(detail.name || '');
+        setSavedName(detail.name || '');
         setShortName(detail.short_name || '');
         setColor(detail.color || 'av-1');
         setIconUrl(detail.icon_url || detail.logo_url || '');
@@ -537,6 +560,7 @@ function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
         description: description.trim() || null,
         join_policy: joinPolicy,
       });
+      setSavedName(updated?.name || name.trim());
       await onUpdated?.(updated);
     } catch (err) {
       setError(err.message || '保存失败');
@@ -546,7 +570,7 @@ function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
   };
 
   const deleteServer = async () => {
-    if (!server?.id || deleteConfirm !== name || deleteLoading) return;
+    if (!server?.id || deleteConfirm !== savedName || deleteLoading) return;
     setDeleteLoading(true);
     setError('');
     try {
@@ -694,13 +718,13 @@ function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
             <>
               <h3 style={{ margin: '0 0 16px', color: 'var(--ink-0)' }}>权限</h3>
               <p className="form-hint" style={{ marginTop: -8, marginBottom: 18 }}>
-                控制新用户如何加入这个服务器。管理员审核由服务器创建人处理。
+                控制新用户如何发起加入申请。所有申请都会进入审核列表，由服务器创建人处理。
               </p>
               <div className="join-policy-options">
                 {[
-                  ['open', '允许任何用户自由加入', '用户通过推荐列表或邀请链接可以直接进入服务器。'],
-                  ['closed', '任何用户都不能加入', '新用户无法通过申请或邀请链接加入。'],
-                  ['approval', '需要管理员审核加入', '用户申请加入或接受邀请后，会先进入审核申请列表。'],
+                  ['open', '任何用户都可以申请加入', '用户无需邀请链接即可发起申请，经你审核通过后进入服务器。'],
+                  ['approval', '仅限邀请后申请加入', '用户需要通过邀请链接发起申请，经你审核通过后进入服务器。'],
+                  ['closed', '不接受任何新成员', '关闭申请入口，邀请链接也会被拒绝。'],
                 ].map(([value, title, desc]) => (
                   <button
                     key={value}
@@ -740,21 +764,21 @@ function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
                   <button className="btn btn-secondary" onClick={() => setDeleteOpen(true)}>删除服务器</button>
                 ) : (
                   <>
-                    <label className="form-label">请输入服务器名称「{name}」以确认删除</label>
+                    <label className="form-label">请输入服务器名称「{savedName}」以确认删除</label>
                     <input
                       className="form-input"
                       value={deleteConfirm}
                       onChange={e => setDeleteConfirm(e.target.value)}
-                      placeholder={name}
+                      placeholder={savedName}
                     />
                     {error && <div className="form-hint" style={{ color: 'var(--rust)' }}>{error}</div>}
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
                       <button className="btn btn-ghost" onClick={() => { setDeleteOpen(false); setDeleteConfirm(''); }}>取消</button>
                       <button
                         className="btn btn-primary"
-                        disabled={deleteConfirm !== name || deleteLoading}
+                        disabled={deleteConfirm !== savedName || deleteLoading}
                         onClick={deleteServer}
-                        style={{ background: deleteConfirm === name ? 'var(--rust)' : undefined }}
+                        style={{ background: deleteConfirm === savedName ? 'var(--rust)' : undefined }}
                       >
                         {deleteLoading ? '删除中...' : '确认删除'}
                       </button>
@@ -1060,6 +1084,7 @@ function ChannelEditModal({ server, channel, onClose, onUpdated, onDeleted }) {
 function InviteModal({ server, onClose }) {
   const [invite, setInvite] = useStateM(null);
   const [friends, setFriends] = useStateM([]);
+  const [memberIds, setMemberIds] = useStateM(null);
   const [query, setQuery] = useStateM('');
   const [copied, setCopied] = useStateM(false);
   const [sentTo, setSentTo] = useStateM({});
@@ -1085,6 +1110,9 @@ function InviteModal({ server, onClose }) {
   React.useEffect(() => {
     generateInvite();
     API.get('/api/friends').then(setFriends).catch(() => setFriends([]));
+    API.get(`/api/servers/${server?.id}/members`)
+      .then(members => setMemberIds(new Set(members.map(member => member.user?.id).filter(Boolean))))
+      .catch(() => setMemberIds(null));
   }, [server?.id]);
 
   const copyLink = async () => {
@@ -1134,8 +1162,12 @@ function InviteModal({ server, onClose }) {
               <div className="friend-name">{friend.display_name}</div>
               <div className="friend-sub">@{friend.username}</div>
             </div>
-            <button className="btn btn-secondary" disabled={!link || sentTo[friend.id]} onClick={() => inviteFriend(friend)}>
-              {sentTo[friend.id] ? '已邀请' : '邀请'}
+            <button
+              className="btn btn-secondary"
+              disabled={!link || sentTo[friend.id] || memberIds?.has(friend.id)}
+              onClick={() => inviteFriend(friend)}
+            >
+              {memberIds?.has(friend.id) ? '已在服务器' : sentTo[friend.id] ? '已邀请' : '邀请'}
             </button>
           </div>
         ))}

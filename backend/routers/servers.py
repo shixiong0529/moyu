@@ -284,7 +284,7 @@ def update_server(
 
 
 @router.delete("/{server_id}")
-def delete_server(
+async def delete_server(
     server_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -299,6 +299,9 @@ def delete_server(
     if member.role != "founder":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="only founder can delete server")
 
+    member_user_ids = db.scalars(
+        select(ServerMember.user_id).where(ServerMember.server_id == server_id)
+    ).all()
     channel_ids = db.scalars(select(Channel.id).where(Channel.server_id == server_id)).all()
     message_ids = (
         db.scalars(select(Message.id).where(Message.channel_id.in_(channel_ids))).all()
@@ -319,6 +322,10 @@ def delete_server(
     db.execute(delete(ServerMember).where(ServerMember.server_id == server_id))
     db.delete(server)
     db.commit()
+    # 断开所有成员在本服务器各频道的 WS，避免继续收到/发出已删除服务器的广播
+    if channel_ids:
+        for user_id in member_user_ids:
+            await manager.disconnect_user_channels(user_id, list(channel_ids))
     return {"ok": True}
 
 
@@ -711,10 +718,17 @@ def create_channel_group(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="server not found")
     require_manager(db, server_id, current_user.id)
 
+    clean_name = payload.name.strip()
+    existing = db.scalar(
+        select(ChannelGroup).where(ChannelGroup.server_id == server_id, ChannelGroup.name == clean_name)
+    )
+    if existing is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="同名分组已存在")
+
     next_position = db.scalar(
         select(func.coalesce(func.max(ChannelGroup.position), -1)).where(ChannelGroup.server_id == server_id)
     ) + 1
-    group = ChannelGroup(server_id=server_id, name=payload.name.strip(), position=next_position)
+    group = ChannelGroup(server_id=server_id, name=clean_name, position=next_position)
     db.add(group)
     db.commit()
     db.refresh(group)

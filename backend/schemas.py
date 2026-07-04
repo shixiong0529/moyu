@@ -79,6 +79,14 @@ class JoinRequestCreateRequest(BaseModel):
 class ChannelGroupCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=64)
 
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("名称不能为空白")
+        return value
+
 
 class ChannelCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=64)
@@ -86,6 +94,22 @@ class ChannelCreateRequest(BaseModel):
     group_id: int | None = None
     group_name: str | None = Field(default=None, max_length=64)
     topic: str | None = Field(default=None, max_length=256)
+
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("名称不能为空白")
+        return value
+
+    @field_validator("group_name")
+    @classmethod
+    def group_name_not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
 
 
 class ChannelUpdateRequest(BaseModel):

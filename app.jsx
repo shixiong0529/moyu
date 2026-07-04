@@ -1134,8 +1134,19 @@ function App() {
         onInvite={(server) => setInviteServer(server)}
         onReviewRequests={(server) => setJoinRequestsServer(server)}
         onCreateChannel={(server) => {
-          setActiveServerId(server.id);
+          if (server.id !== activeServerId) {
+            // 切换目标服务器时清掉旧分组缓存，否则弹窗会用上一个服务器的分组 id 提交
+            setApiChannelGroups(null);
+            setActiveServerId(server.id);
+          }
           setCreateChannelGroup({});
+        }}
+        onCreateGroup={(server) => {
+          if (server.id !== activeServerId) {
+            setApiChannelGroups(null);
+            setActiveServerId(server.id);
+          }
+          setCreateGroupOpen(true);
         }}
         onServerSettings={(server) => setServerSettingsOpen(server)}
         onDeleteServer={(server) => setServerSettingsOpen({ ...server, _dangerOpen: true })}
@@ -1572,15 +1583,11 @@ function InlineChannelSidebar({
 }) {
   const [menuOpen, setMenuOpen] = React.useState(false);
   const groups = channelGroups || CHANNELS[server.id] || [];
-  const isFounder = server?.role === 'founder';
-  const closeThen = (action) => {
-    setMenuOpen(false);
-    action?.();
-  };
+  const isManager = server?.role === 'founder' || server?.role === 'mod';
   return (
     <div style={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--paper-1)', borderRight: '1px solid var(--paper-3)', minHeight: 0 }}>
       <div
-        className="sidebar-header"
+        className={`sidebar-header${menuOpen ? ' menu-open' : ''}`}
         onClick={() => setMenuOpen(open => !open)}
         style={{ cursor: 'pointer', position: 'relative' }}
       >
@@ -1594,39 +1601,18 @@ function InlineChannelSidebar({
               style={{ position: 'fixed', inset: 0, zIndex: 250 }}
               onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }}
             />
-            <div
-              className="server-context-menu"
-              style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 8, right: 8, zIndex: 260 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <MenuItem icon="users" label="邀请成员" onClick={() => closeThen(onInvite)} />
-              {isFounder && (
-                <MenuItem
-                  icon="inbox"
-                  label={`审核申请${server.pending_join_requests ? `（${server.pending_join_requests}）` : ''}`}
-                  badge={server.pending_join_requests}
-                  onClick={() => closeThen(onReviewRequests)}
-                />
-              )}
-              {isFounder && <MenuDivider />}
-              {isFounder && (
-                <>
-                  <MenuItem icon="hash" label="创建频道" onClick={() => closeThen(() => onCreateChannel?.({}))} />
-                  <MenuItem icon="plus" label="创建分组" onClick={() => closeThen(onCreateGroup)} />
-                </>
-              )}
-              {isFounder && <MenuDivider />}
-              {isFounder && (
-                <MenuItem icon="settings" label="服务器设置" onClick={() => closeThen(onServerSettings)} />
-              )}
-              <MenuDivider />
-              {!isFounder && (
-                <MenuItem danger label="退出服务器" onClick={() => closeThen(onLeaveServer)} />
-              )}
-              {isFounder && (
-                <MenuItem danger icon="close" label="删除服务器" onClick={() => closeThen(onDeleteServer)} />
-              )}
-            </div>
+            <ServerMenu
+              server={server}
+              style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 8, right: 8 }}
+              onClose={() => setMenuOpen(false)}
+              onInvite={onInvite}
+              onReviewRequests={onReviewRequests}
+              onCreateChannel={() => onCreateChannel?.({})}
+              onCreateGroup={onCreateGroup}
+              onServerSettings={onServerSettings}
+              onLeaveServer={onLeaveServer}
+              onDeleteServer={onDeleteServer}
+            />
           </>
         )}
       </div>
@@ -1635,7 +1621,7 @@ function InlineChannelSidebar({
           <React.Fragment key={gi}>
             <div className="section-label">
               <span>{g.group}</span>
-              {isFounder && (
+              {isManager && (
                 <span className="plus" title="创建频道" onClick={(e) => { e.stopPropagation(); onCreateChannel?.(g); }}><Icon name="plus" size={14}/></span>
               )}
             </div>
@@ -1654,54 +1640,6 @@ function InlineChannelSidebar({
       </div>
     </div>
   );
-}
-
-function MenuItem({ icon, label, badge, danger, onClick }) {
-  return (
-    <button
-      className={danger ? 'danger' : ''}
-      onClick={onClick}
-      style={{
-        width: '100%',
-        height: 32,
-        border: 0,
-        borderRadius: 6,
-        background: 'transparent',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '0 10px',
-        cursor: 'pointer',
-        textAlign: 'left',
-        color: danger ? 'var(--rust)' : 'var(--ink-1)',
-        fontSize: 13.5,
-      }}
-    >
-      {icon && <Icon name={icon} size={14}/>}
-      <span style={{ flex: 1 }}>{label}</span>
-      {badge > 0 && (
-        <span style={{
-          minWidth: 18,
-          height: 18,
-          borderRadius: 9,
-          background: 'var(--rust)',
-          color: '#fff',
-          fontSize: 11,
-          fontWeight: 600,
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '0 5px',
-        }}>
-          {badge}
-        </span>
-      )}
-    </button>
-  );
-}
-
-function MenuDivider() {
-  return <div style={{ height: 1, background: 'var(--paper-3)', margin: '4px 0' }} />;
 }
 
 function ChannelActionButtons({ onInvite, onEdit }) {
