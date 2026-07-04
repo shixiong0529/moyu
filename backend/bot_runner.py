@@ -144,7 +144,10 @@ class BotRunner:
         r = await client.get(f"{self.api_base}/api/servers", headers=headers)
         r.raise_for_status()
         servers = r.json()
-        target = next((s for s in servers if "管理员" in s.get("name", "")), None)
+        target = next(
+            (s for s in servers if s.get("is_admin_server") or "管理员" in s.get("name", "")),
+            None,
+        )
         if not target:
             log.warning(f"[bot:{self.bot_id}] not a member of 管理员服务器, no channels to watch")
             return []

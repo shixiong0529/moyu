@@ -151,7 +151,7 @@ def delete_user(user_id: int, admin: User = Depends(require_admin), db: Session 
 
     # ── 1. 处理所属服务器（全用 Core 操作）──────────────────────────
     admin_server = db.scalar(
-        select(Server).where(Server.name == "管理员服务器", Server.owner_id == user_id)
+        select(Server).where(Server.is_admin_server == True, Server.owner_id == user_id)  # noqa: E712
     )
     if admin_server:
         other = db.scalar(select(User).where(User.is_admin == True, User.id != user_id))
@@ -166,7 +166,7 @@ def delete_user(user_id: int, admin: User = Depends(require_admin), db: Session 
                 db.add(ServerMember(server_id=admin_server.id, user_id=other.id, role="founder"))
 
     owned_ids = db.scalars(
-        select(Server.id).where(Server.owner_id == user_id, Server.name != "管理员服务器")
+        select(Server.id).where(Server.owner_id == user_id, Server.is_admin_server == False)  # noqa: E712
     ).all()
     if owned_ids:
         ch_ids = db.scalars(select(Channel.id).where(Channel.server_id.in_(owned_ids))).all()
@@ -261,7 +261,7 @@ def delete_server(server_id: int, admin: User = Depends(require_admin), db: Sess
     s = db.get(Server, server_id)
     if s is None:
         raise HTTPException(status_code=404, detail="server not found")
-    if s.name == "管理员服务器":
+    if s.is_admin_server:
         raise HTTPException(status_code=400, detail="cannot delete admin server")
     write_audit(db, admin.id, "delete_server", "server", server_id, {"name": s.name})
     db.delete(s)
@@ -561,7 +561,7 @@ def _ensure_bot_server_memberships(bot: Bot, db: Session) -> None:
     if not channel_ids:
         # 未指定监听频道 = 自动监听管理员服务器模式：必须先把 bot 加入管理员服务器，
         # 否则 runner 启动后 _discover_channels 找不到任何服务器会直接退出
-        admin_server = db.scalar(select(Server).where(Server.name.contains("管理员")))
+        admin_server = db.scalar(select(Server).where(Server.is_admin_server == True))  # noqa: E712
         if admin_server is None:
             return
         exists = db.scalar(

@@ -120,6 +120,8 @@ class ChannelUpdateRequest(BaseModel):
 class InviteCreateRequest(BaseModel):
     max_uses: int | None = Field(default=None, ge=1, le=1000)
     expires_hours: int | None = Field(default=24, ge=1, le=720)
+    # 默认复用本人在该服务器未过期的邀请，传 true 强制新建
+    force_new: bool = False
 
 
 class ServerFriendInviteRequest(BaseModel):

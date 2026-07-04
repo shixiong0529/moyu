@@ -43,6 +43,7 @@ class Server(Base):
     icon_url: Mapped[str | None] = mapped_column(String(256), nullable=True)
     description: Mapped[str | None] = mapped_column(String(256), nullable=True)
     is_recommended: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    is_admin_server: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     auto_join: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     join_order: Mapped[int] = mapped_column(Integer, nullable=False, default=999, server_default="999")
     join_policy: Mapped[str] = mapped_column(String(16), nullable=False, default="approval", server_default="approval")

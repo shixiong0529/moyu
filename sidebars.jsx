@@ -104,10 +104,14 @@ function ServerMenu({
           {item('settings', '服务器设置', onServerSettings)}
         </>
       )}
-      <div className="server-menu-divider"/>
-      {isFounder
-        ? item('trash', '删除服务器', onDeleteServer, { kind: 'danger' })
-        : item('log-out', '退出服务器', onLeaveServer, { kind: 'danger' })}
+      {(!isFounder || !server?.is_admin_server) && (
+        <>
+          <div className="server-menu-divider"/>
+          {isFounder
+            ? item('trash', '删除服务器', onDeleteServer, { kind: 'danger' })
+            : item('log-out', '退出服务器', onLeaveServer, { kind: 'danger' })}
+        </>
+      )}
     </div>
   );
 }

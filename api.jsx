@@ -190,6 +190,7 @@
       onTyping: handlers.onTyping || (() => {}),
       onDM: handlers.onDM || (() => {}),
       onFriend: handlers.onFriend || (() => {}),
+      onServerDeleted: handlers.onServerDeleted || (() => {}),
       onOpen: handlers.onOpen || (() => {}),
       onError: handlers.onError || (() => {}),
     };
@@ -212,6 +213,7 @@
     if (payload.type === 'typing.start') handlers.onTyping({ ...payload.data, typing: true });
     if (payload.type === 'typing.stop') handlers.onTyping({ ...payload.data, typing: false });
     if (payload.type === 'dm.new') handlers.onDM(payload.data);
+    if (payload.type === 'server.deleted') handlers.onServerDeleted(payload.data);
     if (payload.type && payload.type.startsWith('friend.')) handlers.onFriend(payload);
     if (payload.type === 'error') handlers.onError(payload);
     return payload;

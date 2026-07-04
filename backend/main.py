@@ -141,6 +141,12 @@ def ensure_schema_compatibility() -> None:
             connection.execute(text("ALTER TABLE servers ADD COLUMN description VARCHAR(256)"))
         if "is_recommended" not in server_columns:
             connection.execute(text("ALTER TABLE servers ADD COLUMN is_recommended BOOLEAN NOT NULL DEFAULT false"))
+        if "is_admin_server" not in server_columns:
+            connection.execute(text("ALTER TABLE servers ADD COLUMN is_admin_server BOOLEAN NOT NULL DEFAULT false"))
+            connection.execute(
+                text("UPDATE servers SET is_admin_server = :flag WHERE name = '管理员服务器'"),
+                {"flag": True},
+            )
         if "join_policy" not in server_columns:
             connection.execute(text("ALTER TABLE servers ADD COLUMN join_policy VARCHAR(16) NOT NULL DEFAULT 'approval'"))
         if "auto_join" not in server_columns:
@@ -169,8 +175,8 @@ def ensure_schema_compatibility() -> None:
                 {"name": name, "description": description, "is_recommended": True},
             )
         connection.execute(
-            text("UPDATE servers SET is_recommended = :is_recommended, description = :description WHERE name = '管理员服务器'"),
-            {"description": "系统默认服务器，用于公告、审核和管理通知。", "is_recommended": False},
+            text("UPDATE servers SET is_recommended = :is_recommended, description = :description WHERE is_admin_server = :flag"),
+            {"description": "系统默认服务器，用于公告、审核和管理通知。", "is_recommended": False, "flag": True},
         )
 
 

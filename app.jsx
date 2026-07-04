@@ -33,14 +33,15 @@ function apiServerToRail(server) {
     owner: server.owner,
     created_at: server.created_at,
     join_policy: server.join_policy,
+    is_admin_server: server.is_admin_server || false,
     pending_join_requests: server.pending_join_requests || 0,
   };
 }
 
 function buildServerRailItems(apiServers, dmNotif = 0) {
   const sortedServers = [...(apiServers || [])].sort((a, b) => {
-    if (a.name === '管理员服务器') return -1;
-    if (b.name === '管理员服务器') return 1;
+    if (a.is_admin_server) return -1;
+    if (b.is_admin_server) return 1;
     return 0;
   });
   return [
@@ -773,6 +774,12 @@ function App() {
         try {
           await refreshFriendData();
         } catch {}
+      },
+      onServerDeleted: (data) => {
+        if (!data?.id) return;
+        setApiServers(prev => (prev || []).filter(server => server.id !== data.id));
+        // 正停留在被删除的服务器时退回私信视图（函数式更新避免闭包里的旧值）
+        setActiveServerId(prev => prev === data.id ? 'dm' : prev);
       },
     });
 

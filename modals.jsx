@@ -532,6 +532,7 @@ function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
   }, [logoPreview]);
 
   const isFounder = server?.role === 'founder';
+  const canDelete = isFounder && !server?.is_admin_server;
   const canSave = name.trim() && shortName.trim() && !loading;
   const avatarColors = ['av-1', 'av-2', 'av-3', 'av-4', 'av-5', 'av-6', 'av-7', 'av-8'];
 
@@ -619,7 +620,7 @@ function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
               权限
             </button>
           )}
-          {isFounder && (
+          {canDelete && (
             <button
               className={`settings-nav-btn ${section === 'danger' ? 'active' : ''}`}
               style={{
@@ -746,7 +747,7 @@ function ServerSettingsModal({ server, onClose, onUpdated, onDeleted }) {
             </>
           )}
 
-          {section === 'danger' && isFounder && (
+          {section === 'danger' && canDelete && (
             <>
               <div style={{
                 border: '1px solid rgba(181,88,58,0.35)',
@@ -1095,11 +1096,11 @@ function InviteModal({ server, onClose }) {
     return text.includes(query.trim().toLowerCase());
   });
 
-  const generateInvite = async () => {
+  const generateInvite = async ({ forceNew = false } = {}) => {
     if (!server?.id) return;
     setError('');
     try {
-      const result = await API.post(`/api/servers/${server.id}/invite`, {});
+      const result = await API.post(`/api/servers/${server.id}/invite`, { force_new: forceNew });
       setInvite(result);
       setCopied(false);
     } catch (err) {
@@ -1177,7 +1178,7 @@ function InviteModal({ server, onClose }) {
       <div className="form-hint">邀请码：{invite?.code || '...'} · 协议链接：{invite?.url || '...'}</div>
       {error && <div className="form-hint" style={{ color: 'var(--rust)' }}>{error}</div>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
-        <button className="btn btn-ghost" onClick={generateInvite}>重新生成</button>
+        <button className="btn btn-ghost" onClick={() => generateInvite({ forceNew: true })}>重新生成</button>
         <button className="btn btn-primary" disabled={!link} onClick={copyLink}>{copied ? '已复制！' : '复制链接'}</button>
       </div>
     </Modal>

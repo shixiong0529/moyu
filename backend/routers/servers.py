@@ -51,6 +51,7 @@ def server_to_dict(
         "logo_url": public_asset_url(server.icon_url, request),
         "description": server.description,
         "is_recommended": server.is_recommended,
+        "is_admin_server": server.is_admin_server,
         "join_policy": server.join_policy,
         "owner_id": server.owner_id,
         "owner_username": server.owner.username if getattr(server, "owner", None) else None,
@@ -152,6 +153,20 @@ def dm_to_dict(message: DirectMessage) -> dict:
         "sender": user_to_dict(message.sender),
         "receiver": user_to_dict(message.receiver),
     }
+
+
+def find_reusable_invite(db: Session, server_id: int, creator_id: int) -> Invite | None:
+    """本人在该服务器还有至少 1 小时有效期、无次数上限的邀请，可直接复用。"""
+    return db.scalar(
+        select(Invite)
+        .where(
+            Invite.server_id == server_id,
+            Invite.creator_id == creator_id,
+            Invite.max_uses.is_(None),
+            Invite.expires_at > datetime.utcnow() + timedelta(hours=1),
+        )
+        .order_by(Invite.expires_at.desc())
+    )
 
 
 def create_invite_record(db: Session, server_id: int, creator_id: int, payload: InviteCreateRequest | None = None) -> Invite:
@@ -292,7 +307,7 @@ async def delete_server(
     server = db.get(Server, server_id)
     if server is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="server not found")
-    if server.name == "管理员服务器":
+    if server.is_admin_server:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin server cannot be deleted")
 
     member = require_member(db, server_id, current_user.id)
@@ -302,6 +317,7 @@ async def delete_server(
     member_user_ids = db.scalars(
         select(ServerMember.user_id).where(ServerMember.server_id == server_id)
     ).all()
+    server_name = server.name
     channel_ids = db.scalars(select(Channel.id).where(Channel.server_id == server_id)).all()
     message_ids = (
         db.scalars(select(Message.id).where(Message.channel_id.in_(channel_ids))).all()
@@ -322,9 +338,11 @@ async def delete_server(
     db.execute(delete(ServerMember).where(ServerMember.server_id == server_id))
     db.delete(server)
     db.commit()
-    # 断开所有成员在本服务器各频道的 WS，避免继续收到/发出已删除服务器的广播
-    if channel_ids:
-        for user_id in member_user_ids:
+    # 通知所有成员实时移除该服务器，再断开其在本服务器各频道的 WS
+    deleted_event = {"type": "server.deleted", "data": {"id": server_id, "name": server_name}}
+    for user_id in member_user_ids:
+        await manager.send_to_user(user_id, deleted_event)
+        if channel_ids:
             await manager.disconnect_user_channels(user_id, list(channel_ids))
     return {"ok": True}
 
@@ -644,7 +662,7 @@ def list_members(server_id: int, current_user: User = Depends(get_current_user),
                     member.user.is_bot
                     and not bot_channel_ids(member.user)
                     and server
-                    and "管理员" in server.name
+                    and server.is_admin_server
                 ),
                 "created_at": member.user.created_at,
             },
@@ -752,6 +770,12 @@ def create_invite(
     if db.get(Server, server_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="server not found")
 
+    # 默认复用，避免每次打开弹窗都新增记录；「重新生成」传 force_new 才新建
+    if payload is None or (not payload.force_new and payload.max_uses is None):
+        existing = find_reusable_invite(db, server_id, current_user.id)
+        if existing is not None:
+            return invite_to_dict(existing, request)
+
     invite = create_invite_record(db, server_id, current_user.id, payload)
     db.commit()
     db.refresh(invite)
@@ -778,8 +802,10 @@ async def invite_friend_to_server(
     if db.scalar(select(Friendship).where(Friendship.user_id == current_user.id, Friendship.friend_id == friend.id)) is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="user is not your friend")
 
-    invite = create_invite_record(db, server_id, current_user.id)
-    db.flush()
+    invite = find_reusable_invite(db, server_id, current_user.id)
+    if invite is None:
+        invite = create_invite_record(db, server_id, current_user.id)
+        db.flush()
     invite_data = invite_to_dict(invite, request)
     message = DirectMessage(
         sender_id=current_user.id,

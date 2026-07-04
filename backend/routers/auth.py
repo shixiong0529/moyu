@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 def get_or_create_admin_server(db: Session) -> Server:
-    server = db.scalar(select(Server).where(Server.name == "管理员服务器"))
+    server = db.scalar(select(Server).where(Server.is_admin_server == True))  # noqa: E712
     if server is not None:
         return server
 
@@ -28,6 +28,7 @@ def get_or_create_admin_server(db: Session) -> Server:
         color="av-6",
         description="系统默认服务器，用于公告、审核和管理通知。",
         owner_id=owner.id,
+        is_admin_server=True,
     )
     db.add(server)
     db.flush()
