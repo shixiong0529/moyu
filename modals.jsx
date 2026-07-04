@@ -1409,7 +1409,7 @@ function ProfileCard({ member, position, onClose, onOpenDM, onMention, viewerRol
 
   const style = {
     position: 'fixed',
-    left: Math.min(position.x, window.innerWidth - 340),
+    left: Math.max(8, Math.min(position.x, window.innerWidth - 340)),
     top: Math.max(20, Math.min(position.y, window.innerHeight - 420)),
     zIndex: 220,
   };

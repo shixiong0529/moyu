@@ -70,6 +70,9 @@ const Icon = ({ name, size = 16, stroke = 1.5 }) => {
     case 'chevron-right': return (
       <svg {...common}><path d="M9 6l6 6-6 6"/></svg>
     );
+    case 'back': return (
+      <svg {...common}><path d="M15 6l-6 6 6 6"/></svg>
+    );
     case 'smile': return (
       <svg {...common}><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="0.5"/><circle cx="15" cy="10" r="0.5"/><path d="M9 15a4 4 0 0 0 6 0"/></svg>
     );

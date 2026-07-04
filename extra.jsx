@@ -56,11 +56,12 @@ function TweaksPanel({ active, theme, setTheme, accent, setAccent, density, setD
 }
 
 /* DM chat view — reuses chat components but with a header showing the friend */
-function DMView({ dm, messages, onSend, onOpenProfile, currentUser, inviteDecisions = {}, onAcceptInvite, onRejectInvite, sendError, sendMode }) {
+function DMView({ dm, messages, onSend, onOpenProfile, currentUser, inviteDecisions = {}, onAcceptInvite, onRejectInvite, sendError, sendMode, onBackToNav }) {
   if (!dm) {
     return (
       <div className="chat">
         <div className="chat-header">
+          {onBackToNav && <button className="mobile-back-btn" title="返回列表" aria-label="返回列表" onClick={onBackToNav}><Icon name="back" size={18}/></button>}
           <div className="title" style={{ fontSize: 16 }}>私信</div>
           <div className="topic">只显示与你有关的私聊</div>
         </div>
@@ -76,6 +77,7 @@ function DMView({ dm, messages, onSend, onOpenProfile, currentUser, inviteDecisi
   return (
     <div className="chat">
       <div className="chat-header">
+        {onBackToNav && <button className="mobile-back-btn" title="返回列表" aria-label="返回列表" onClick={onBackToNav}><Icon name="back" size={18}/></button>}
         <div className={`avatar ${dm.color}`} style={{ width: 28, height: 28, borderRadius: '50%', position: 'relative', marginRight: 6 }}>
           <span className={`status-dot ${dm.status}`}/>
         </div>
@@ -116,7 +118,7 @@ function DMView({ dm, messages, onSend, onOpenProfile, currentUser, inviteDecisi
   );
 }
 
-function FriendsView({ friends = [], requests = [], initialTab = 'all', onAddFriend, onRefresh, onOpenDM }) {
+function FriendsView({ friends = [], requests = [], initialTab = 'all', onAddFriend, onRefresh, onOpenDM, onBackToNav }) {
   const [tab, setTab] = useStateT(initialTab);
   const [query, setQuery] = useStateT('');
   const [statusText, setStatusText] = useStateT('');
@@ -201,6 +203,7 @@ function FriendsView({ friends = [], requests = [], initialTab = 'all', onAddFri
   return (
     <div className="chat">
       <div className="chat-header friends-header">
+        {onBackToNav && <button className="mobile-back-btn" title="返回列表" aria-label="返回列表" onClick={onBackToNav}><Icon name="back" size={18}/></button>}
         <span className="glyph"><Icon name="users" size={16}/></span>
         <div className="title">好友</div>
         <button className={`friend-tab ${tab === 'all' ? 'active' : ''}`} onClick={() => setTab('all')}>全部</button>

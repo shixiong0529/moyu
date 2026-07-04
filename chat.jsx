@@ -41,10 +41,11 @@ function getInviteLink(content) {
   return match ? match[0].replace(/[，。！？、,.!?]+$/, '') : '';
 }
 
-function ChatHeader({ channel, onToggleMembers, searchValue, setSearchValue, pinsOpen, onTogglePins, pinsCount = 0 }) {
+function ChatHeader({ channel, onToggleMembers, searchValue, setSearchValue, pinsOpen, onTogglePins, pinsCount = 0, onBackToNav }) {
   if (!channel) return null;
   return (
     <div className="chat-header">
+      {onBackToNav && <button className="mobile-back-btn" title="返回列表" aria-label="返回列表" onClick={onBackToNav}><Icon name="back" size={18}/></button>}
       <div className="title">
         <span className="glyph"><ChannelGlyph kind={channel.kind}/></span>
         {channel.name}
@@ -536,7 +537,7 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
         <textarea ref={ref} rows={1} placeholder={`发送到 #${channelName}`} value={val} onChange={onChange} onKeyDown={onKey}/>
         <div className="right-tools" style={{ position: 'relative' }}>
           {emojiOpen && (
-            <div style={{
+            <div className="emoji-popover" style={{
               position: 'absolute',
               right: -8,
               bottom: '100%',
@@ -731,7 +732,7 @@ function ThreadPanel({ rootMessage, replies, onClose, onSendReply }) {
   );
 }
 
-function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, searchValue, setSearchValue, sendError, typingText, currentUser, currentRole, sendMode, pendingMention, mentionMembers, onLoadMore, hasMore, loadingMore, pinsVersion }) {
+function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, searchValue, setSearchValue, sendError, typingText, currentUser, currentRole, sendMode, pendingMention, mentionMembers, onLoadMore, hasMore, loadingMore, pinsVersion, onBackToNav }) {
   const scrollRef = useRefChat(null);
   const atBottomRef = useRefChat(true);
   const prevHeightRef = useRefChat(null);
@@ -920,6 +921,7 @@ function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, s
         pinsOpen={pinsOpen}
         onTogglePins={() => setPinsOpen(open => !open)}
         pinsCount={pins.length}
+        onBackToNav={onBackToNav}
       />
       {pinsOpen && <PinsPanel pins={pins} onClose={() => setPinsOpen(false)} onUnpin={unpinMessage} canManage={['founder', 'mod'].includes(currentRole)}/>}
       <div className="messages" ref={scrollRef} onScroll={onMessagesScroll}>

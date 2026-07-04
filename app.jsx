@@ -217,6 +217,14 @@ function App() {
   const [muted, setMuted] = useStateApp(false);
   const [deafened, setDeafened] = useStateApp(false);
   const [showMembers, setShowMembers] = useStateApp(true);
+  // 手机断点下频道列表/聊天区二选一显示；桌面端 CSS 不读取这个属性，完全不受影响
+  const [mobileView, setMobileView] = useStateApp('nav');
+  const goToChatOnMobile = () => {
+    setMobileView('chat');
+    // 手机上成员栏是全屏覆盖层，若默认展开的 showMembers 保持 true 会一进频道就盖住聊天区；
+    // 桌面端成员栏只是并排的 240px 侧栏，不受影响，所以只在手机宽度下才收起
+    if (window.matchMedia('(max-width: 768px)').matches) setShowMembers(false);
+  };
   const [search, setSearch] = useStateApp('');
   const [tweaksOn, setTweaksOn] = useStateApp(false);
   const [messagesByChannel, setMessagesByChannel] = useStateApp({});
@@ -313,7 +321,7 @@ function App() {
           return;
         }
         await enterServer(server);
-        if (inviteChannelId) setActiveChannelId(inviteChannelId);
+        if (inviteChannelId) { setActiveChannelId(inviteChannelId); goToChatOnMobile(); }
         window.history.replaceState({}, document.title, window.location.pathname);
       })
       .catch(() => {});
@@ -1109,7 +1117,7 @@ function App() {
   }
 
   return (
-    <div className={`app theme-${theme} density-${density}${reduceMotion ? ' reduce-motion' : ''}${alwaysTimestamps ? ' always-timestamps' : ''}${blurImages ? ' blur-images' : ''}`} style={{ ...rootStyle, zoom: fontSize / 100 }}>
+    <div className={`app theme-${theme} density-${density}${reduceMotion ? ' reduce-motion' : ''}${alwaysTimestamps ? ' always-timestamps' : ''}${blurImages ? ' blur-images' : ''}`} data-mobile-view={mobileView} style={{ ...rootStyle, zoom: fontSize / 100 }}>
       <ServerRail
         servers={serverRailItems}
         activeServer={activeServerId}
@@ -1134,7 +1142,7 @@ function App() {
         onLeave={(server) => setLeaveServerOpen(server)}
       />
 
-      <div style={{ width: 240, flex: '0 0 240px', display: 'flex', flexDirection: 'column', background: 'var(--paper-1)' }}>
+      <div className="app-nav-col" style={{ width: 240, flex: '0 0 240px', display: 'flex', flexDirection: 'column', background: 'var(--paper-1)' }}>
         <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
           {isDM ? (
             <DMSidebarFlex
@@ -1142,9 +1150,9 @@ function App() {
               activeView={activeDMId}
               dmList={dmList}
               friendRequests={friendRequests}
-              onSelect={(dm) => setActiveDMId(dm.id)}
-              onOpenFriends={() => { setFriendsInitialTab('all'); setActiveDMId('friends'); }}
-              onOpenPendingFriends={() => { setFriendsInitialTab('pending'); setActiveDMId('friends'); }}
+              onSelect={(dm) => { setActiveDMId(dm.id); goToChatOnMobile(); }}
+              onOpenFriends={() => { setFriendsInitialTab('all'); setActiveDMId('friends'); goToChatOnMobile(); }}
+              onOpenPendingFriends={() => { setFriendsInitialTab('pending'); setActiveDMId('friends'); goToChatOnMobile(); }}
               onOpenAddFriend={() => setFriendRequestsOpen(true)}
             />
           ) : (
@@ -1152,7 +1160,7 @@ function App() {
               server={activeServer}
               channelGroups={channelGroups}
               activeChannel={activeChannel}
-              onSelectChannel={(ch) => setActiveChannelId(ch.id)}
+              onSelectChannel={(ch) => { setActiveChannelId(ch.id); goToChatOnMobile(); }}
               onCreateChannel={(group) => setCreateChannelGroup(group || {})}
               onInvite={() => setInviteServer(activeServer)}
               onReviewRequests={() => setJoinRequestsServer(activeServer)}
@@ -1184,6 +1192,7 @@ function App() {
             initialTab={friendsInitialTab}
             onAddFriend={() => setFriendRequestsOpen(true)}
             onRefresh={refreshFriendData}
+            onBackToNav={() => setMobileView('nav')}
             onOpenDM={(friend) => {
               const existing = dmList.find(item => item.id === friend.id);
               const next = existing || {
@@ -1197,6 +1206,7 @@ function App() {
               };
               if (!existing) setDmList(prev => [next, ...prev]);
               setActiveDMId(next.id);
+              goToChatOnMobile();
             }}
           />
         ) : (
@@ -1211,6 +1221,7 @@ function App() {
             onRejectInvite={handleRejectInvite}
             sendMode={sendMode}
             sendError={sendError}
+            onBackToNav={() => setMobileView('nav')}
           />
         )
       ) : (
@@ -1219,6 +1230,7 @@ function App() {
           messages={visibleMessages}
           onSend={handleSend}
           onToggleMembers={() => setShowMembers(v => !v)}
+          onBackToNav={() => setMobileView('nav')}
           onOpenProfile={handleOpenProfile}
           onReact={() => {}}
           searchValue={search}
@@ -1242,6 +1254,7 @@ function App() {
           members={visibleServerMembers}
           onOpenMember={handleOpenMember}
           onMentionMember={(m) => setPendingMention({ name: m.name, ts: Date.now() })}
+          onClose={() => setShowMembers(false)}
         />
       )}
 
@@ -1360,6 +1373,7 @@ function App() {
             const existing = dmList.find(d => d.name === m.name);
             if (existing) {
               setActiveDMId(existing.id);
+              goToChatOnMobile();
               return;
             }
             if (m.userId) {
@@ -1375,6 +1389,7 @@ function App() {
               setDmList(prev => [next, ...prev.filter(item => item.id !== next.id)]);
               setActiveDMId(next.id);
             }
+            goToChatOnMobile();
           }}
         />
       )}
@@ -1408,12 +1423,14 @@ function App() {
             if (item.type === 'channel') {
               setActiveServerId(item.serverId);
               setActiveChannelId(item.channel.id);
+              goToChatOnMobile();
             } else if (item.type === 'server') {
               setActiveServerId(item.server.id);
               setApiChannelGroups(null);
             } else if (item.type === 'dm') {
               setActiveServerId('dm');
               setActiveDMId(item.dm.id);
+              goToChatOnMobile();
             }
             setQuickSwitchOpen(false);
           }}

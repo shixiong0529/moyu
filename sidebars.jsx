@@ -384,10 +384,16 @@ function UserCard({ user, onOpenSettings, onOpenProfile, onOpenTelegram, muted, 
   );
 }
 
-function MemberSidebar({ members, onOpenMember, onMentionMember }) {
+function MemberSidebar({ members, onOpenMember, onMentionMember, onClose }) {
   const list = members?.length ? members : MEMBERS;
   return (
     <div className="member-sidebar">
+      {onClose && (
+        <div className="member-sidebar-mobile-head">
+          <span>成员</span>
+          <button className="icon-btn" title="关闭" aria-label="关闭" onClick={onClose}><Icon name="close" size={16}/></button>
+        </div>
+      )}
       {list.map(group => (
         <div key={group.key}>
           <div className="member-group-label">

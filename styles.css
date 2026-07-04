@@ -1093,6 +1093,8 @@ body {
   display: flex; align-items: center; justify-content: center;
 }
 .chat-header .icon-btn:hover { background: var(--paper-2); color: var(--ink-0); }
+/* 手机断点专用的返回按钮，桌面端不显示（见文末移动端媒体查询） */
+.mobile-back-btn { display: none; }
 
 .search-box {
   height: 28px;
@@ -1804,6 +1806,8 @@ body {
 }
 .member-sidebar::-webkit-scrollbar { width: 6px; }
 .member-sidebar::-webkit-scrollbar-thumb { background: var(--paper-3); border-radius: 3px; }
+/* 手机断点专用的关闭条，桌面端不显示（见文末移动端媒体查询） */
+.member-sidebar-mobile-head { display: none; }
 
 .member-group-label {
   padding: 10px 16px 4px;
@@ -4207,4 +4211,177 @@ label:has(> .avatar-upload-overlay):hover .avatar-upload-overlay { opacity: 1 !i
   color: var(--ink-1);
   min-width: 38px;
   text-align: right;
+}
+
+/* ============================================================
+   手机响应式布局 —— 只在 <=768px 生效，不修改任何断点外的规则，
+   PC 端布局保持原样。桌面 flex 布局是"服务器栏 + 频道/私信栏(240px)
+   + 聊天区(flex:1) + 成员栏(240px，条件渲染)"四栏一行；手机屏幕放不下，
+   改为"导航列表"与"聊天区"二选一显示（由 app.jsx 的 data-mobile-view
+   属性驱动），成员栏变成全屏覆盖层。
+   ============================================================ */
+@media (max-width: 768px) {
+  .app { position: relative; }
+
+  /* 二选一：nav（服务器栏+频道/私信栏）或 chat（聊天区），互斥显示；
+     app-nav-col 元素上有内联 style 设置了 display:flex，非 !important 的
+     类选择器无法覆盖内联样式，这里必须加 !important */
+  .app[data-mobile-view="chat"] .server-rail {
+    display: none;
+  }
+  .app[data-mobile-view="chat"] .app-nav-col {
+    display: none !important;
+  }
+  .app[data-mobile-view="nav"] .chat,
+  .app[data-mobile-view="nav"] .member-sidebar {
+    display: none;
+  }
+
+  .server-rail { width: 64px; flex: 0 0 64px; }
+  .app-nav-col {
+    width: auto !important;
+    flex: 1 1 auto !important;
+  }
+
+  /* 返回按钮：显示在频道/私信/好友页头部左侧 */
+  .mobile-back-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px; height: 32px;
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    color: var(--ink-1);
+    cursor: pointer;
+  }
+  .mobile-back-btn:hover { background: var(--paper-2); }
+
+  /* 频道头部窄屏精简：隐藏简介文字，搜索框收成图标 */
+  .chat-header .title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chat-header .topic { display: none; }
+  .search-box { width: 34px; padding: 0; justify-content: center; overflow: hidden; }
+  .search-box input { display: none; }
+
+  /* 好友页头部项目较多，允许横向滚动而不是挤压/溢出到屏幕外 */
+  .friends-header {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+  .friends-header .title,
+  .friend-tab,
+  .friends-header .btn { flex-shrink: 0; }
+  .friends-page { padding: 12px 16px; }
+
+  /* 成员栏：从固定右栏变成全屏覆盖层，顶部加关闭条 */
+  .member-sidebar {
+    position: fixed;
+    inset: 0;
+    z-index: 150;
+    width: 100%;
+    flex: none;
+    padding-top: 0;
+  }
+  .member-sidebar-mobile-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 48px;
+    padding: 0 8px 0 16px;
+    border-bottom: 1px solid var(--paper-3);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    background: var(--paper-1);
+    z-index: 1;
+  }
+
+  /* 消息操作按钮：触屏没有 hover，常驻显示并放大点击区域 */
+  .msg-actions { display: flex !important; }
+  .msg-actions button { width: 34px; height: 34px; }
+
+  /* 引用条等绝对定位元素可能超出窄屏宽度，禁止消息列表横向溢出 */
+  .messages { overflow-x: hidden; }
+
+  /* 表情选择 / 消息表情选择：改为贴底的全宽面板，方便单手操作 */
+  .emoji-popover,
+  .reaction-picker {
+    position: fixed !important;
+    left: 8px !important;
+    right: 8px !important;
+    bottom: 8px !important;
+    top: auto !important;
+    width: auto !important;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+
+  /* 右键/更多操作菜单：手机没有右键，改为屏幕底部居中弹出 */
+  .context-menu {
+    position: fixed !important;
+    left: 50% !important;
+    top: auto !important;
+    bottom: 12px !important;
+    transform: translateX(-50%);
+    width: min(320px, calc(100vw - 24px));
+  }
+
+  /* @ 提及候选框改为通栏，方便点击 */
+  .mention-popover { left: 8px; right: 8px; width: auto; }
+
+  /* 置顶面板 / 线索面板：占满屏幕，而不是右上角/右侧悬浮小卡片 */
+  .pins-panel {
+    left: 0; right: 0;
+    top: 48px;
+    width: auto;
+    max-height: calc(100dvh - 48px);
+    border-radius: 0;
+  }
+  .thread-panel { width: 100%; }
+
+  /* 通用触控区域放大 */
+  .composer .plus,
+  .composer .send-btn,
+  .icon-btn { width: 36px; height: 36px; }
+
+  /* 输入框底部适配 iPhone 手势条安全区 */
+  .composer-wrap { padding-bottom: env(safe-area-inset-bottom); }
+
+  /* 通用弹窗：已有 max-width:92% 兜底不溢出，这里贴边留白更紧凑 */
+  .modal { width: 100%; }
+
+  /* 资料卡片：略缩窄避免贴边（本身已按 window.innerWidth 做定位限位） */
+  .profile-card { width: min(320px, calc(100vw - 24px)); }
+
+  /* 设置面板：侧边栏从纵向列表改为顶部横向 Tab，内容区占满剩余空间 */
+  .settings-root { padding: 0; align-items: stretch; }
+  .settings-dialog {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    border-radius: 0;
+    flex-direction: column;
+  }
+  .settings-sidebar {
+    width: 100%;
+    flex: 0 0 auto;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 8px 10px;
+    gap: 4px;
+    border-right: none;
+    border-bottom: 1px solid var(--paper-3);
+  }
+  .settings-sidebar .group-label,
+  .settings-sidebar-divider { display: none; }
+  .settings-sidebar a { width: auto; white-space: nowrap; flex: none; }
+  .settings-main { padding: 20px 16px 24px; }
 }

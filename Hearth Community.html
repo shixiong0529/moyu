@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>摸鱼社区</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -19,6 +19,11 @@
 
   <style>
     html, body, #root { height: 100%; }
+    /* 手机浏览器地址栏/键盘弹出时 100vh 会跳动，用 100dvh 跟随实际可视区域；
+       桌面端没有这类系统 UI，dvh 和 vh 等价，不影响 PC 布局 */
+    @supports (height: 100dvh) {
+      html, body, #root { height: 100dvh; }
+    }
     body { background: #2a1f14; }
   </style>
 </head>
