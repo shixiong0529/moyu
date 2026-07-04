@@ -54,7 +54,7 @@
 - [x] 申请加入推荐服务器，同样需要目标服务器管理者审核
 - [x] 退出服务器
 - [x] 服务器成员管理（founder / mod / member 三级角色）
-- [x] 生成邀请链接（可设置使用次数，默认 24 小时后过期；过期或超次数使用会明确提示"邀请链接已失效"）
+- [x] 生成邀请链接（可设置使用次数，默认 24 小时后过期；过期或超次数使用会明确提示"邀请链接已失效"）；默认复用本人未过期的邀请链接，避免重复打开邀请弹窗就新增记录，可手动"重新生成"
 - [x] 邀请好友加入：通过私信发送带邀请链接的消息
 - [x] 加入申请的审核（通过 / 拒绝），仅 founder 可操作
 - [x] 加入申请提交时自动向 founder 发送私信通知
@@ -63,11 +63,12 @@
 - [x] 删除服务器（需输入名称二次确认，仅 founder）
 
 ### 频道
-- [x] 频道分组（可自定义分组名和顺序）
-- [x] 频道类型：文字频道、公告频道、语音频道
+- [x] 频道分组（可自定义分组名和顺序，支持重命名 / 删除空分组，mod+ 可操作）
+- [x] 频道类型：文字频道、公告频道、语音频道（语音频道目前仅界面展示，未实现实时语音通话）
 - [x] 在服务器内创建频道
 - [x] 频道话题（Topic）
 - [x] 编辑 / 删除频道（mod+ 可操作）
+- [x] 匿名发言（"树洞"模式）：mod+ 可按频道开启，成员可选择以固定编号的匿名身份发言；founder/mod 始终能看到真实身份，其他成员看到的是脱敏身份
 
 ### 消息
 - [x] 发送 / 编辑 / 删除消息
@@ -75,6 +76,7 @@
 - [x] @提及成员（高亮显示）
 - [x] Markdown 渲染（**加粗** *斜体* `代码` 等）
 - [x] 图片消息（自动识别图片链接并展示预览）
+- [x] 链接预览卡片：消息里的首个链接自动抓取标题 / 简介 / 封面图渲染成卡片（含 SSRF 防护，拒绝抓取内网 / 回环地址）
 - [x] 文件/图片上传（JPG、PNG、GIF、WebP，最大 5MB）
 - [x] 表情回应（Emoji Reactions，toggle 逻辑）
 - [x] 快速回应（📚 ☕ 🌿 ✨）
@@ -172,18 +174,14 @@ biscord/
 ├── extra.jsx               # 辅助组件（DM 视图、好友页、Telegram 面板）
 ├── admin.jsx               # 管理后台前端
 ├── app.jsx                 # 根组件（状态管理、路由逻辑）
-├── bot/                    # 独立 bot 脚本（备用，可不启动）
-│   ├── bot.py
-│   ├── config.py
-│   ├── requirements.txt
-│   └── .env.example
 └── backend/
     ├── main.py             # FastAPI 应用入口、路由注册、静态文件服务
     ├── database.py         # SQLAlchemy 引擎和 session
-    ├── models.py           # 所有 ORM 模型（16 张表）
+    ├── models.py           # 所有 ORM 模型（17 张表）
     ├── schemas.py          # Pydantic 请求/响应模型
     ├── auth.py             # JWT 工具函数、密码验证
     ├── bot_runner.py       # Bot 进程管理（asyncio 后台任务）
+    ├── link_preview.py     # 链接预览抓取（OG 元数据 + SSRF 防护）
     ├── seed.py             # 数据库种子脚本（初始数据）
     ├── telegram_service.py # Telegram 通知服务
     ├── requirements.txt
@@ -320,16 +318,17 @@ DATABASE_URL=sqlite:///./biscord.db
 
 ## 数据库结构
 
-共 16 张表：
+共 17 张表：
 
 | 表名 | 说明 |
 |------|------|
 | `users` | 用户账号，含 Telegram 绑定信息 |
-| `servers` | 服务器（社区），含图标、描述、推荐标记、加入策略 |
+| `servers` | 服务器（社区），含图标、描述、推荐标记、加入策略、`is_admin_server` 标记 |
 | `server_members` | 服务器成员关系（founder / mod / member） |
 | `channel_groups` | 频道分组（侧边栏中的分类） |
-| `channels` | 频道（text / announce / voice） |
-| `messages` | 频道消息，支持软删除、引用回复 |
+| `channels` | 频道（text / announce / voice），含 `allow_anonymous` 匿名开关 |
+| `messages` | 频道消息，支持软删除、引用回复、匿名发言（`is_anonymous`）、链接预览缓存（`embed_json`） |
+| `channel_anon_identities` | 频道内匿名身份编号（用户 + 频道 → 固定编号，不跨频道复用） |
 | `reactions` | 消息表情回应 |
 | `direct_messages` | 私信消息 |
 | `pinned_messages` | 置顶消息 |
@@ -384,8 +383,8 @@ Authorization: Bearer <access_token>
 | DELETE | `/servers/{id}/members/me` | 退出服务器 |
 | PATCH | `/servers/{id}/members/{uid}` | 设置成员角色 mod/member（仅 founder） |
 | DELETE | `/servers/{id}/members/{uid}` | 移出成员（founder 可移除任何人，mod 只能移除普通成员） |
-| POST | `/servers/{id}/invite` | 生成邀请码（任意成员可操作） |
-| POST | `/servers/{id}/invite-friend` | 向好友发送私信邀请（含邀请链接） |
+| POST | `/servers/{id}/invite` | 生成邀请码（任意成员可操作）；默认复用本人未过期的邀请，传 `force_new: true` 强制新建 |
+| POST | `/servers/{id}/invite-friend` | 向好友发送私信邀请（含邀请链接），同样默认复用未过期邀请 |
 | POST | `/servers/join` | 通过邀请码 / 服务器ID / 服务器名加入，非 closed 一律进入待审队列并通知 founder |
 | POST | `/servers/{id}/join-requests` | 申请加入推荐服务器，非 closed 一律进入待审队列并通知 founder |
 | GET | `/servers/{id}/join-requests` | 查看待审申请（仅 founder） |
@@ -393,6 +392,8 @@ Authorization: Bearer <access_token>
 | POST | `/servers/{id}/join-requests/{rid}/reject` | 拒绝申请（仅 founder） |
 | POST | `/servers/{id}/channels` | 创建频道（mod+） |
 | POST | `/servers/{id}/channel-groups` | 创建频道分组（mod+） |
+| PATCH | `/servers/{id}/channel-groups/{gid}` | 重命名频道分组（mod+，同名分组会拒绝） |
+| DELETE | `/servers/{id}/channel-groups/{gid}` | 删除频道分组（mod+，仅限空分组） |
 
 #### 加入策略（join_policy）
 
@@ -408,10 +409,10 @@ Authorization: Bearer <access_token>
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/servers/{id}/channels` | 按分组返回频道列表 |
-| PATCH | `/channels/{id}` | 编辑频道名称/话题（mod+） |
+| PATCH | `/channels/{id}` | 编辑频道名称/话题/`allow_anonymous` 匿名开关（mod+） |
 | DELETE | `/channels/{id}` | 删除频道（mod+） |
-| GET | `/channels/{id}/messages` | 消息列表（支持 limit + before 分页） |
-| POST | `/channels/{id}/messages` | 发送消息 |
+| GET | `/channels/{id}/messages` | 消息列表（支持 limit + before 分页；匿名消息按当前用户角色脱敏） |
+| POST | `/channels/{id}/messages` | 发送消息，`is_anonymous: true` 需频道已开启匿名；正文含链接时自动抓取预览存入 `embed` |
 | PATCH | `/messages/{id}` | 编辑消息（仅作者） |
 | DELETE | `/messages/{id}` | 删除消息（作者或 mod+，软删除） |
 | POST | `/messages/{id}/reactions` | 添加/移除表情（toggle） |
@@ -533,6 +534,10 @@ Authorization: Bearer <access_token>
 | `friend.request` | 收到好友申请 | 申请对象 |
 | `friend.update` | 好友申请状态变化 | 申请对象 |
 | `friend.deleted` | 被好友删除 | `{friend_id}` |
+| `server.deleted` | 所在服务器被删除（经私信 socket 下发） | `{id, name}` |
+| `server.channels_changed` | 频道 / 分组被增删改（经私信 socket 下发） | `{server_id}` |
+
+匿名频道里的 `message.new` 广播会按接收者身份分别计算：founder/mod 收到真实作者信息，其他成员（含发送者本人）收到脱敏后的"树洞居民 #N"身份，不是同一份数据广播给所有人。
 
 ### 客户端 → 服务端事件
 

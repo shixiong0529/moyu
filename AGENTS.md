@@ -88,8 +88,21 @@ HTML 中还内嵌了 `window.__HEARTH_TWEAKS`，包含初始 theme/accent/densit
   lines: [...],       // 文本段落数组
   reactions: [{ emo, count, mine }],
   replyTo: { name, text },           // 可选，引用回复
-  embedCard: { kind, title, meta, hostedBy, rsvp },  // 可选，嵌入卡片
+  embed: { kind: 'link', url, title, description, image, siteName },  // 可选，链接预览卡片
+  isAnonymous: true,  // 可选，匿名树洞消息（见下）
   bot: true,          // 可选，显示 BOT 徽标
 }
 ```
 消息列表中还支持 `type: 'intro'`（频道介绍块）和 `type: 'day'`（日期分隔线）两种特殊类型。
+
+`embedCard: { kind, meta, hostedBy, rsvp }`（data.jsx 种子数据里的旧字段）从未真正接入渲染，是历史遗留的静态展示数据，与上面这个真实工作的 `embed` 字段无关，不要混淆。
+
+## 链接预览卡片
+
+发消息时后端（`backend/link_preview.py`）会检测正文里的第一个 URL，抓取其 Open Graph 元数据（`og:title`/`og:description`/`og:image`/`og:site_name`），写入 `messages.embed_json`，前端 `LinkPreviewCard`（chat.jsx）渲染成卡片。抓取前会做 SSRF 防护：解析域名对应的所有 IP，任意一个落在内网/回环/链路本地范围就拒绝抓取；重定向也会逐跳重新校验。抓取失败（超时、内网地址、非 HTML 响应等）时 `embed` 就是 `null`，不影响消息本身发送成功。
+
+## 匿名树洞
+
+频道（`Channel.allow_anonymous`）可以在编辑频道弹窗里开启"允许匿名发言"。开启后 Composer 会出现 🎭 匿名切换按钮，发送时传 `is_anonymous: true`。同一用户在同一频道内的匿名身份编号固定不变（`channel_anon_identities` 表），显示为"🎭 树洞居民 #N"；不同频道之间编号不复用，避免互相关联。
+
+脱敏是**按查看者身份**在后端动态计算的，不是简单的一份数据发给所有人：服务器 founder/mod 看到的永远是真实身份（用于内容审核），其他成员（包括匿名消息的发送者本人）看到的是脱敏后的"树洞居民 #N"。REST 接口和 WebSocket 广播（`ConnectionManager.broadcast_to_channel_masked`）都按这个规则分别计算，不能只生成一份数据广播给所有连接。匿名消息不触发 `@提及` 的 Telegram 通知（通知文案会带发送者真实身份，等于变相解除匿名）。
