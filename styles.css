@@ -658,6 +658,150 @@ body {
 }
 .channel-invite-friend:hover { background: var(--hover-overlay); }
 
+/* ── 邀请成员弹窗 ── */
+.invite-search {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--paper-1);
+  border: 1px solid var(--paper-3);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--ink-2);
+}
+.invite-search:focus-within { border-color: var(--accent); }
+.invite-search input {
+  border: none;
+  background: transparent;
+  outline: none;
+  flex: 1;
+  min-width: 0;
+  color: var(--ink-0);
+  font-family: var(--ff-ui);
+  font-size: 13.5px;
+}
+.invite-friend-list {
+  max-height: 236px;
+  overflow-y: auto;
+  margin: 10px 0 2px;
+  padding: 2px;
+}
+.invite-friend-list::-webkit-scrollbar { width: 4px; }
+.invite-friend-list::-webkit-scrollbar-thumb { background: var(--paper-3); border-radius: 2px; }
+.invite-friend-list .channel-invite-friend { padding: 7px 8px; border-radius: 8px; }
+.invite-row-avatar {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  overflow: visible;
+}
+.invite-row-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+.invite-row-avatar > span {
+  font-family: var(--ff-serif);
+  font-weight: 700;
+  font-size: 15px;
+  color: rgba(255, 247, 235, 0.95);
+}
+.invite-row-avatar .status-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+}
+.invite-row-btn { height: 30px; padding: 0 16px; font-size: 12.5px; }
+.invite-row-status {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  padding: 0 4px;
+  white-space: nowrap;
+}
+.invite-row-status.sent { color: var(--accent); font-weight: 600; }
+.invite-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 26px 12px;
+  color: var(--ink-2);
+  text-align: center;
+}
+.invite-empty p {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-1);
+}
+.invite-empty em {
+  font-style: normal;
+  font-size: 12px;
+}
+.invite-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0 12px;
+  color: var(--ink-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.invite-divider::before,
+.invite-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--paper-3);
+}
+.invite-link-row {
+  display: flex;
+  gap: 8px;
+}
+.invite-link-row input {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  border: 1px solid var(--paper-3);
+  border-radius: 8px;
+  background: var(--paper-1);
+  padding: 0 12px;
+  color: var(--ink-0);
+  font-family: var(--ff-mono);
+  font-size: 13px;
+  outline: none;
+  text-overflow: ellipsis;
+}
+.invite-link-row input:focus { border-color: var(--accent); }
+.invite-link-row .btn { height: 42px; padding: 0 18px; flex-shrink: 0; }
+.invite-link-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+  min-height: 18px;
+}
+.invite-regenerate {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.invite-regenerate:hover { color: var(--accent); }
+
 .channel-topic-editor {
   height: 120px;
   padding: 10px 12px;

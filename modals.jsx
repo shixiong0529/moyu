@@ -1140,47 +1140,75 @@ function InviteModal({ server, onClose }) {
     }
   };
 
+  const expiresText = (() => {
+    if (!invite?.expires_at) return '';
+    const expires = new Date(invite.expires_at);
+    if (Number.isNaN(expires.getTime())) return '';
+    const hours = Math.max(1, Math.round((expires.getTime() - Date.now()) / 3600000));
+    return `链接 ${hours} 小时内有效`;
+  })();
+
   return (
     <Modal
       title="邀请成员"
-      subtitle={server?.name || ''}
+      subtitle={server?.name ? `邀请好友加入「${server.name}」` : ''}
       onClose={onClose}
       wide
     >
-      <div className="search-box" style={{ height: 42, marginBottom: 14 }}>
-        <Icon name="search" size={14}/>
+      <div className="invite-search">
+        <Icon name="search" size={15}/>
         <input placeholder="搜索好友" value={query} onChange={e => setQuery(e.target.value)}/>
       </div>
-      <div style={{ minHeight: 120, maxHeight: 220, overflowY: 'auto', marginBottom: 16 }}>
+
+      <div className="invite-friend-list">
         {visibleFriends.length === 0 ? (
-          <div className="form-hint">暂无可邀请的好友。</div>
-        ) : visibleFriends.map(friend => (
-          <div key={friend.id} className="channel-invite-friend">
-            <div className={`avatar ${friend.avatar_color || 'av-1'}`}>
-              <span className={`status-dot ${friend.status || 'offline'}`}/>
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="friend-name">{friend.display_name}</div>
-              <div className="friend-sub">@{friend.username}</div>
-            </div>
-            <button
-              className="btn btn-secondary"
-              disabled={!link || sentTo[friend.id] || memberIds?.has(friend.id)}
-              onClick={() => inviteFriend(friend)}
-            >
-              {memberIds?.has(friend.id) ? '已在服务器' : sentTo[friend.id] ? '已邀请' : '邀请'}
-            </button>
+          <div className="invite-empty">
+            <Icon name="users" size={26}/>
+            <p>{friends.length === 0 ? '还没有可邀请的好友' : '没有匹配的好友'}</p>
+            <em>{friends.length === 0 ? '先去添加好友，或直接分享下方的邀请链接。' : '换个关键词试试。'}</em>
           </div>
-        ))}
+        ) : visibleFriends.map(friend => {
+          const isMember = memberIds?.has(friend.id);
+          const isSent = Boolean(sentTo[friend.id]);
+          return (
+            <div key={friend.id} className="channel-invite-friend">
+              <div className={`invite-row-avatar ${friend.avatar_url ? '' : (friend.avatar_color || 'av-1')}`}>
+                {friend.avatar_url
+                  ? <img src={API.assetUrl(friend.avatar_url)} alt={friend.display_name}/>
+                  : <span>{(friend.display_name || friend.username || '?').slice(0, 1)}</span>}
+                <i className={`status-dot ${friend.status || 'offline'}`}/>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="friend-name">{friend.display_name}</div>
+                <div className="friend-sub">@{friend.username}</div>
+              </div>
+              {isMember ? (
+                <span className="invite-row-status">已在服务器</span>
+              ) : isSent ? (
+                <span className="invite-row-status sent">✓ 已发送</span>
+              ) : (
+                <button className="btn btn-secondary invite-row-btn" disabled={!link} onClick={() => inviteFriend(friend)}>
+                  邀请
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
-      <label className="form-label">邀请链接</label>
-      <input className="form-input" value={link || '正在生成...'} readOnly onFocus={e => e.target.select()}/>
-      <div className="form-hint">邀请码：{invite?.code || '...'} · 协议链接：{invite?.url || '...'}</div>
+
+      <div className="invite-divider"><span>或分享邀请链接</span></div>
+
+      <div className="invite-link-row">
+        <input value={link || '正在生成...'} readOnly onFocus={e => e.target.select()}/>
+        <button className="btn btn-primary" disabled={!link} onClick={copyLink}>
+          {copied ? '已复制 ✓' : '复制'}
+        </button>
+      </div>
+      <div className="invite-link-meta">
+        <span>{expiresText}</span>
+        <button className="invite-regenerate" onClick={() => generateInvite({ forceNew: true })}>重新生成</button>
+      </div>
       {error && <div className="form-hint" style={{ color: 'var(--rust)' }}>{error}</div>}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
-        <button className="btn btn-ghost" onClick={() => generateInvite({ forceNew: true })}>重新生成</button>
-        <button className="btn btn-primary" disabled={!link} onClick={copyLink}>{copied ? '已复制！' : '复制链接'}</button>
-      </div>
     </Modal>
   );
 }
