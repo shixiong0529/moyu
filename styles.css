@@ -1508,6 +1508,13 @@ body {
 .mention-popover > div.active,
 .mention-popover > div:hover { background: var(--paper-2); }
 .mention-popover .avatar { width: 22px; height: 22px; border-radius: 50%; }
+/* 弹层内的状态点改为行内小圆点（基类是给头像角标用的绝对定位） */
+.mention-popover .status-dot {
+  position: static;
+  width: 8px; height: 8px;
+  border-width: 1.5px;
+  flex: none;
+}
 
 .pins-panel {
   position: absolute;
@@ -1634,6 +1641,38 @@ body {
   margin-bottom: 4px;
 }
 .pin-item .btn { margin-top: 8px; height: 28px; font-size: 12px; }
+.pin-item .thread-images { margin-top: 6px; }
+
+/* 消息头部的"已置顶"标识 */
+.pin-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-family: var(--ff-mono);
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 4px;
+  padding: 1px 6px;
+  line-height: 1.5;
+}
+
+/* 频道头部图钉按钮上的置顶数量角标 */
+.pin-count {
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--paper-0);
+  font-size: 9px;
+  font-family: var(--ff-mono);
+  line-height: 14px;
+  text-align: center;
+}
 
 /* Reply */
 .reply-context {

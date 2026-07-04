@@ -41,7 +41,7 @@ function getInviteLink(content) {
   return match ? match[0].replace(/[，。！？、,.!?]+$/, '') : '';
 }
 
-function ChatHeader({ channel, onToggleMembers, searchValue, setSearchValue, pinsOpen, onTogglePins }) {
+function ChatHeader({ channel, onToggleMembers, searchValue, setSearchValue, pinsOpen, onTogglePins, pinsCount = 0 }) {
   if (!channel) return null;
   return (
     <div className="chat-header">
@@ -51,7 +51,10 @@ function ChatHeader({ channel, onToggleMembers, searchValue, setSearchValue, pin
       </div>
       {channel.topic && <div className="topic">{channel.topic}</div>}
       <div className="actions">
-        <button className={`icon-btn ${pinsOpen ? 'active' : ''}`} title="置顶消息" onClick={onTogglePins}><Icon name="pin" size={17}/></button>
+        <button className={`icon-btn ${pinsOpen ? 'active' : ''}`} title="置顶消息" onClick={onTogglePins} style={{ position: 'relative' }}>
+          <Icon name="pin" size={17}/>
+          {pinsCount > 0 && <span className="pin-count">{pinsCount > 9 ? '9+' : pinsCount}</span>}
+        </button>
         <button className="icon-btn" title="成员列表" onClick={onToggleMembers}><Icon name="users" size={17}/></button>
         <div className="search-box">
           <Icon name="search" size={12}/>
@@ -62,7 +65,7 @@ function ChatHeader({ channel, onToggleMembers, searchValue, setSearchValue, pin
   );
 }
 
-function ContextMenu({ x, y, canEdit, canDelete, canPin, onPickEmoji, onReply, onEdit, onDelete, onPin, onThread, onClose }) {
+function ContextMenu({ x, y, canEdit, canDelete, canPin, pinned, onPickEmoji, onReply, onEdit, onDelete, onPin, onThread, onClose }) {
   useEffectChat(function closeOnEscape() {
     const onKey = e => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -75,7 +78,7 @@ function ContextMenu({ x, y, canEdit, canDelete, canPin, onPickEmoji, onReply, o
         {onReply && <button onClick={() => { onReply(); onClose(); }}>回复</button>}
         <button onClick={() => { onPickEmoji(); onClose(); }}>添加表情</button>
         <button onClick={() => { onThread(); onClose(); }}>线索回复</button>
-        {canPin && <button onClick={() => { onPin(); onClose(); }}>置顶</button>}
+        {canPin && <button onClick={() => { onPin(); onClose(); }}>{pinned ? '取消置顶' : '置顶'}</button>}
         {canEdit && <button onClick={() => { onEdit(); onClose(); }}>编辑</button>}
         {canDelete && <button className="danger" onClick={() => { onDelete(); onClose(); }}>删除</button>}
       </div>
@@ -105,7 +108,7 @@ function ReactionPicker({ onPick, onClose }) {
   );
 }
 
-function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, onOpenThread, onReply, compact, currentUser, currentRole, inviteDecision, onAcceptInvite, onRejectInvite }) {
+function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, onOpenThread, onReply, compact, pinned, currentUser, currentRole, inviteDecision, onAcceptInvite, onRejectInvite }) {
   const [editing, setEditing] = useStateChat(false);
   const [editValue, setEditValue] = useStateChat(msg.content || msg.lines?.join('\n') || '');
   const [menu, setMenu] = useStateChat(null);
@@ -145,7 +148,8 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
     }
   };
 
-  const isCompact = compact && !msg.replyTo && !editing;
+  // 置顶消息始终显示完整头部，让"已置顶"标识可见
+  const isCompact = compact && !msg.replyTo && !editing && !pinned;
 
   return (
     <div
@@ -182,6 +186,7 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
             </span>
             {msg.bot && <span className="badge-bot">BOT</span>}
             <span className="time">{msg.time}{msg.isEdited ? ' · 已编辑' : ''}</span>
+            {pinned && <span className="pin-flag" title="这条消息已置顶"><Icon name="pin" size={10}/>已置顶</span>}
           </div>
         )}
         {editing ? (
@@ -255,7 +260,7 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
         <button title="添加表情" aria-label="添加表情" onClick={() => setPickerOpen(true)}><Icon name="smile" size={15}/></button>
         {onReply && <button title="回复" aria-label="回复" onClick={() => onReply(msg)}><Icon name="reply" size={15}/></button>}
         <button title="线索回复" aria-label="线索回复" onClick={() => onOpenThread(msg)}><Icon name="thread" size={15}/></button>
-        {canPin && <button title="置顶消息" aria-label="置顶消息" onClick={() => onPin(msg.id)}><Icon name="pin" size={15}/></button>}
+        {canPin && <button title={pinned ? '取消置顶' : '置顶消息'} aria-label={pinned ? '取消置顶' : '置顶消息'} onClick={() => onPin(msg.id)}><Icon name="pin" size={15}/></button>}
         {canEdit && <button title="编辑消息" aria-label="编辑消息" onClick={() => setEditing(true)}><Icon name="edit" size={15}/></button>}
         {canDelete && <button title="删除消息" aria-label="删除消息" onClick={() => { if (confirm('删除这条消息？')) onDelete(msg.id); }}><Icon name="close" size={15}/></button>}
         <button title="更多操作" aria-label="更多操作" onClick={(e) => setMenu({ x: e.clientX, y: e.clientY })}><Icon name="more" size={15}/></button>
@@ -273,6 +278,7 @@ function MessageGroup({ msg, onOpenProfile, onReact, onEdit, onDelete, onPin, on
           canEdit={canEdit}
           canDelete={canDelete}
           canPin={canPin}
+          pinned={pinned}
           onPickEmoji={() => setPickerOpen(true)}
           onReply={onReply ? () => onReply(msg) : undefined}
           onEdit={() => setEditing(true)}
@@ -306,18 +312,21 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
   const ref = useRefChat(null);
   const fileRef = useRefChat(null);
   const stopTypingRef = useRefChat(null);
-  // @ 补全候选：只输入 @ 时展示 bot + 在线用户（都没有则退回全员）；
-  // 继续输入时在全部成员里按名字过滤（离线的也能 @，对方上线后能看到）
+  // @ 补全候选：只输入 @ 时仅展示在线成员（含运行中的 bot），不混入离线的人；
+  // 继续输入时在全部成员里按名字过滤（离线的输入名字仍能 @，对方上线后能看到）
   const mentionQueryMatch = val.match(/@([\p{L}\p{N}_·.-]*)$/u);
   const mentionQuery = mentionQueryMatch ? mentionQueryMatch[1] : null;
   let mentionOptions = [];
   if (mentionQuery !== null) {
     const q = mentionQuery.toLowerCase();
+    const hasStatusInfo = members.some(m => m.status);
     if (q) {
-      mentionOptions = members.filter(m => (m.name || '').toLowerCase().includes(q));
+      mentionOptions = members.filter(m => (m.name || '').toLowerCase().includes(q) || (m.username || '').toLowerCase().includes(q));
+    } else if (hasStatusInfo) {
+      mentionOptions = members.filter(m => ['online', 'idle', 'dnd'].includes(m.status));
     } else {
-      mentionOptions = members.filter(m => m.isBot || ['online', 'idle', 'dnd'].includes(m.status));
-      if (!mentionOptions.length) mentionOptions = members;
+      // 静态预览的种子数据没有状态信息，退回全员
+      mentionOptions = members;
     }
     mentionOptions = mentionOptions.slice(0, 10);
   }
@@ -327,6 +336,11 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
     setVal(prev => (prev.endsWith(' ') || prev === '' ? prev : prev + ' ') + '@' + pendingMention.name + ' ');
     ref.current?.focus();
   }, [pendingMention?.ts]);
+
+  // 点"回复"后光标直接落到输入框，不用再点一次
+  useEffectChat(function focusOnReply() {
+    if (replyTarget) ref.current?.focus();
+  }, [replyTarget]);
 
   const resizeComposer = (ta = ref.current) => {
     if (!ta) return;
@@ -510,6 +524,7 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
             }}>
               <span className={`avatar ${member.color || 'av-1'}`}/>
               <span>{member.name}</span>
+              {member.status && <span className={`status-dot ${member.status}`}/>}
               {member.username && <span className="mention-handle">@{member.username}</span>}
             </div>
           ))}
@@ -606,7 +621,13 @@ function Composer({ channelName, onSend, error, typingText, members = [], sendMo
   );
 }
 
-function PinsPanel({ pins, onClose, onUnpin }) {
+function PinsPanel({ pins, onClose, onUnpin, canManage }) {
+  const fmtTime = (iso) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getMonth() + 1}月${d.getDate()}日 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
   return (
     <div className="pins-panel">
       <div className="head">
@@ -614,14 +635,27 @@ function PinsPanel({ pins, onClose, onUnpin }) {
         <button className="icon-btn" onClick={onClose}><Icon name="close" size={14}/></button>
       </div>
       {pins.length === 0 ? (
-        <div className="empty">暂无置顶消息</div>
-      ) : pins.map(pin => (
-        <div className="pin-item" key={pin.id}>
-          <div className="meta">{pin.message?.author?.display_name || pin.message?.name || 'Unknown'}</div>
-          <div>{pin.message?.content}</div>
-          <button className="btn btn-secondary" onClick={() => onUnpin(pin.message_id)}>取消置顶</button>
-        </div>
-      ))}
+        <div className="empty">暂无置顶消息{canManage ? '。鼠标悬停消息，点图钉按钮即可置顶。' : ''}</div>
+      ) : pins.map(pin => {
+        const content = pin.message?.content || '';
+        const links = getImageLinks(content);
+        const text = links.length > 0 ? stripImageLinks(content) : content;
+        const when = fmtTime(pin.message?.created_at);
+        return (
+          <div className="pin-item" key={pin.id}>
+            <div className="meta">{pin.message?.author?.display_name || pin.message?.name || 'Unknown'}{when ? ` · ${when}` : ''}</div>
+            {text && <div>{text}</div>}
+            {links.length > 0 && (
+              <div className="thread-images">
+                {links.map(link => (
+                  <a key={link} href={link} target="_blank" rel="noreferrer"><img src={link} alt="图片"/></a>
+                ))}
+              </div>
+            )}
+            {canManage && <button className="btn btn-secondary" onClick={() => onUnpin(pin.message_id)}>取消置顶</button>}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -685,7 +719,7 @@ function ThreadPanel({ rootMessage, replies, onClose, onSendReply }) {
         })}
       </div>
       <div className="thread-compose">
-        <textarea value={value} onChange={e => setValue(e.target.value)} onKeyDown={e => {
+        <textarea autoFocus value={value} onChange={e => setValue(e.target.value)} onKeyDown={e => {
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             submit();
@@ -697,7 +731,7 @@ function ThreadPanel({ rootMessage, replies, onClose, onSendReply }) {
   );
 }
 
-function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, searchValue, setSearchValue, sendError, typingText, currentUser, currentRole, sendMode, pendingMention, mentionMembers, onLoadMore, hasMore, loadingMore }) {
+function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, searchValue, setSearchValue, sendError, typingText, currentUser, currentRole, sendMode, pendingMention, mentionMembers, onLoadMore, hasMore, loadingMore, pinsVersion }) {
   const scrollRef = useRefChat(null);
   const atBottomRef = useRefChat(true);
   const prevHeightRef = useRefChat(null);
@@ -715,8 +749,12 @@ function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, s
 
   const loadPins = async () => {
     if (!channel?.id || typeof channel.id !== 'number') return;
-    const result = await API.get(`/api/channels/${channel.id}/pins`);
-    setPins(result);
+    try {
+      const result = await API.get(`/api/channels/${channel.id}/pins`);
+      setPins(Array.isArray(result) ? result : []);
+    } catch {
+      setPins([]);
+    }
   };
 
   // 只有当用户已在底部附近时才自动滚到底，避免翻看历史时被新消息强行拉走
@@ -753,9 +791,11 @@ function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, s
     }
   };
 
+  // 进频道就拉一次置顶列表（消息流里要标"已置顶"），收到 pin.update 广播时（pinsVersion 变化）也刷新
   useEffectChat(function refreshPinsOnChannel() {
-    if (pinsOpen) loadPins();
-  }, [channel?.id, pinsOpen]);
+    setPins([]);
+    loadPins();
+  }, [channel?.id, pinsVersion]);
 
   const editMessage = async (id, content) => {
     await API.patch(`/api/messages/${id}`, { content });
@@ -766,15 +806,29 @@ function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, s
   const reactMessage = async (id, emoji) => {
     await API.post(`/api/messages/${id}/reactions`, { emoji });
   };
+  const pinnedIds = useMemoChat(() => new Set(pins.map(pin => pin.message_id)), [pins]);
+  // 图钉按钮做成开关：已置顶再点一次就是取消置顶
   const pinMessage = async (id) => {
     if (!channel?.id) return;
-    await API.post(`/api/channels/${channel.id}/pins/${id}`, {});
-    await loadPins();
+    try {
+      if (pinnedIds.has(id)) {
+        await API.del(`/api/channels/${channel.id}/pins/${id}`);
+      } else {
+        await API.post(`/api/channels/${channel.id}/pins/${id}`, {});
+      }
+      await loadPins();
+    } catch (err) {
+      alert(err?.message || '置顶操作失败');
+    }
   };
   const unpinMessage = async (id) => {
     if (!channel?.id) return;
-    await API.del(`/api/channels/${channel.id}/pins/${id}`);
-    await loadPins();
+    try {
+      await API.del(`/api/channels/${channel.id}/pins/${id}`);
+      await loadPins();
+    } catch (err) {
+      alert(err?.message || '取消置顶失败');
+    }
   };
   const threadReplies = useMemoChat(() => (
     messages.filter(message => message.type === 'message' && message.replyToId === threadMessage?.id)
@@ -865,8 +919,9 @@ function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, s
         setSearchValue={setSearchValue}
         pinsOpen={pinsOpen}
         onTogglePins={() => setPinsOpen(open => !open)}
+        pinsCount={pins.length}
       />
-      {pinsOpen && <PinsPanel pins={pins} onClose={() => setPinsOpen(false)} onUnpin={unpinMessage}/>}
+      {pinsOpen && <PinsPanel pins={pins} onClose={() => setPinsOpen(false)} onUnpin={unpinMessage} canManage={['founder', 'mod'].includes(currentRole)}/>}
       <div className="messages" ref={scrollRef} onScroll={onMessagesScroll}>
         {loadingMore && (
           <div style={{ textAlign: 'center', padding: '8px 0', color: 'var(--ink-2)', fontSize: 12 }}>加载更早的消息…</div>
@@ -882,6 +937,7 @@ function ChatArea({ channel, messages, onSend, onToggleMembers, onOpenProfile, s
               key={item.id}
               msg={item}
               compact={compact}
+              pinned={pinnedIds.has(item.id)}
               onOpenProfile={onOpenProfile}
               onReact={reactMessage}
               onEdit={editMessage}

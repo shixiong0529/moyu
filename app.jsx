@@ -226,6 +226,8 @@ function App() {
   const [inviteDecisions, setInviteDecisions] = useStateApp(init('invite-decisions', {}));
   const [sendError, setSendError] = useStateApp('');
   const [typingUsers, setTypingUsers] = useStateApp({});
+  // pin.update 广播计数，传给 ChatArea 触发置顶列表刷新
+  const [pinsVersion, setPinsVersion] = useStateApp(0);
   const [serverMembers, setServerMembers] = useStateApp([]);
   const [membersRefreshKey, setMembersRefreshKey] = useStateApp(0);
   const inviteHandledRef = useRefApp(false);
@@ -704,6 +706,10 @@ function App() {
             })),
           } : item),
         }));
+      },
+      onPinUpdate: () => {
+        // 别人置顶/取消置顶时刷新当前频道的置顶列表
+        setPinsVersion(v => v + 1);
       },
       onTyping: (event) => {
         if (event.user_id === currentUserDisplay.id) return;
@@ -1224,6 +1230,7 @@ function App() {
           sendMode={sendMode}
           pendingMention={pendingMention}
           mentionMembers={mentionMembers}
+          pinsVersion={pinsVersion}
           onLoadMore={loadMoreChannelMessages}
           hasMore={Boolean(channelHasMore[channelKey])}
           loadingMore={loadingMore}

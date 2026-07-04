@@ -186,6 +186,7 @@
       onEdit: handlers.onEdit || (() => {}),
       onDelete: handlers.onDelete || (() => {}),
       onReaction: handlers.onReaction || (() => {}),
+      onPinUpdate: handlers.onPinUpdate || (() => {}),
       onTyping: handlers.onTyping || (() => {}),
       onDM: handlers.onDM || (() => {}),
       onFriend: handlers.onFriend || (() => {}),
@@ -207,6 +208,7 @@
     if (payload.type === 'message.edit') handlers.onEdit(payload.data);
     if (payload.type === 'message.delete') handlers.onDelete(payload.data);
     if (payload.type === 'reaction.update') handlers.onReaction(payload.data);
+    if (payload.type === 'pin.update') handlers.onPinUpdate(payload.data);
     if (payload.type === 'typing.start') handlers.onTyping({ ...payload.data, typing: true });
     if (payload.type === 'typing.stop') handlers.onTyping({ ...payload.data, typing: false });
     if (payload.type === 'dm.new') handlers.onDM(payload.data);
